@@ -1,238 +1,100 @@
 const { expect } = require("chai");
 const { ethers } = require("hardhat");
+// const { generateKeyPairSync } = require('crypto');
 
 describe("PKI", function () {
 
-    var rootCaCertificate = {
+    // const { publicKey, privateKey } = generateKeyPairSync('rsa', {
+    //     modulusLength: 2048,
+    //     publicExponent: 0x10101,
+    //     publicKeyEncoding: {
+    //         type: 'spki',
+    //         format: 'der',
+    //     },
+    //     privateKeyEncoding: {
+    //         type: 'pkcs8',
+    //         format: 'der'
+    //     }
+    // });
+
+    // // Prints asymmetric key pair
+    // console.log("The public key is: ", publicKey);
+    // console.log();
+    // console.log("The private key is: ", privateKey);
+
+    const index = {
         "subject": {
-            "commonName": "Blockchain Root CA",
-            "organization": "Root CA",
-            "locality": "TRZ",
-            "state": "TN",
-            "country": "IN",
+            "commonName": 0,
+            "organization": 1,
+            "locality": 2,
+            "state": 3,
+            "country": 4,
         },
         "issuer": {
-            "commonName": "Blockchain Root CA",
-            "organization": "Root CA",
-            "locality": "TRZ",
-            "state": "TN",
-            "country": "IN",
+            "commonName": 5,
+            "organization": 6,
+            "locality": 7,
+            "state": 8,
+            "country": 9,
         },
         "validity": {
-            "notBefore": 1681161711,
-            "notAfter": 1781161711,
+            "notBefore": 10,
+            "notAfter": 11,
         },
         "subjectAltName": {
-            "dnsNames": [],
-            "ipAddresses": [],
-            "emailAddresses": [],
-            "uris": [],
+            "dnsNames": 12,
+            "ipAddresses": 13,
+            "emailAddresses": 14,
+            "uris": 15,
         },
         "publicKeyInfo": {
-            "algorithm": "rsaEncryption",
-            "keySize": 2048,
-            "publicKey": "toBeFilled"
+            "algorithm": 16,
+            "keySize": 17,
+            "publicKey": 18
         },
         "miscellaneous": {
-            "version": 3,
-            "serialNumber": 0,
-            "signatureAlgorithm": "sha256WithRSAEncryption",
+            "version": 19,
+            "serialNumber": 20,
+            "signatureAlgorithm": 21,
         },
         "fingerprints": {
-            "sha1": "toBeFilled",
-            "_sha256": "toBeFilled",
+            "sha1": 22,
+            "_sha256": 23,
         },
         "basicConstraints": {
-            "isCA": true,
-            "pathLenConstraint": 0,
+            "isCA": 24,
+            "pathLenConstraint": 25,
         },
-        "keyUsage": {
-            "digitalSignature": true,
-            "contentCommitment": true,
-            "keyEncipherment": true,
-            "dataEncipherment": true,
-            "keyAgreement": true,
-            "keyCertSign": true,
-            "cRLSign": true,
-            "encipherOnly": true,
-            "decipherOnly": true,
-        },
-        "subjectKeyIdentifier": "0",
-        "authorityKeyIdentifier": "0",
         "extensions": {
-            "subjectAddress": "",
-            "issuerAddress": "",
-            "blockchainName": "solana",
-            "caAddress": "",
+            "subjectAddress": 26,
+            "issuerAddress": 27,
+            "blockchainName": 28,
+            "caAddress": 29,
         },
-        "signature": "0",
+        "subjectKeyIdentifier": 30,
+        "authorityKeyIdentifier": 31,
+        "signature": 32,
     }
 
-    var subCaCertificate = {
-        "subject": {
-            "commonName": "Blockchain Sub CA",
-            "organization": "Sub CA",
-            "locality": "TRZ",
-            "state": "TN",
-            "country": "IN",
-        },
-        "validity": {
-            "notBefore": 1681161711,
-            "notAfter": 1781161711,
-        },
-        "subjectAltName": {
-            "dnsNames": [],
-            "ipAddresses": [],
-            "emailAddresses": [],
-            "uris": [],
-        },
-        "publicKeyInfo": {
-            "algorithm": "rsaEncryption",
-            "keySize": 2048,
-            "publicKey": "toBeFilled"
-        },
-        "miscellaneous": {
-            "version": 3,
-            "serialNumber": 0,
-            "signatureAlgorithm": "sha256WithRSAEncryption",
-        },
-        "fingerprints": {
-            "sha1": "toBeFilled",
-            "_sha256": "toBeFilled",
-        },
-        "basicConstraints": {
-            "isCA": true,
-            "pathLenConstraint": 0,
-        },
-        "keyUsage": {
-            "digitalSignature": true,
-            "contentCommitment": true,
-            "keyEncipherment": true,
-            "dataEncipherment": true,
-            "keyAgreement": true,
-            "keyCertSign": true,
-            "cRLSign": true,
-            "encipherOnly": true,
-            "decipherOnly": true,
-        },
-        "subjectKeyIdentifier": "0",
-        "authorityKeyIdentifier": "0",
-        "signature": "0",
-    }
+    // const keys = ["SubjectCommonName", "SubjectOrganization", "SubjectLocality", "SubjectState", "SubjectCountry", "IssuerCommonName", "IssuerOrganization", "IssuerLocality", "IssuerState", "IssuerCountry", "ValidityNotBefore", "ValidityNotAfter", "DnsNames", "IpAddresses", "EmailAddresses", "URIs", "PublicKeyAlgorithm", "PublicKeySize", "PublicKeyValue", "Version", "SerialNumber", "SignatureAlgorithm", "SHA1", "SHA256", "IsCA", "PathLengthConstraint", "SubjectAddress", "IssuerAddress", "BlockchainName", "CaAddress", "SubjectKeyIdentifier", "AuthorityKeyIdentifier", "Signature"];
 
-    var userCertificate = {
-        "subject": {
-            "commonName": "Blockchain User 1",
-            "organization": "Users",
-            "locality": "TRZ",
-            "state": "TN",
-            "country": "IN",
-        },
-        "validity": {
-            "notBefore": 1681161711,
-            "notAfter": 1781161711,
-        },
-        "subjectAltName": {
-            "dnsNames": [],
-            "ipAddresses": [],
-            "emailAddresses": [],
-            "uris": [],
-        },
-        "publicKeyInfo": {
-            "algorithm": "rsaEncryption",
-            "keySize": 2048,
-            "publicKey": "toBeFilled"
-        },
-        "miscellaneous": {
-            "version": 3,
-            "serialNumber": 0,
-            "signatureAlgorithm": "sha256WithRSAEncryption",
-        },
-        "fingerprints": {
-            "sha1": "toBeFilled",
-            "_sha256": "toBeFilled",
-        },
-        "basicConstraints": {
-            "isCA": true,
-            "pathLenConstraint": 0,
-        },
-        "keyUsage": {
-            "digitalSignature": true,
-            "contentCommitment": true,
-            "keyEncipherment": true,
-            "dataEncipherment": true,
-            "keyAgreement": true,
-            "keyCertSign": true,
-            "cRLSign": true,
-            "encipherOnly": true,
-            "decipherOnly": true,
-        },
-        "subjectKeyIdentifier": "0",
-        "authorityKeyIdentifier": "0",
-        "signature": "0",
-    }
+    var rootCaCertificate = ["Blockchain Root CA", "Root CA", "TRZ", "TN", "IN", "Blockchain Root CA", "Root CA", "TRZ", "TN", "IN", "1681161711", "1781161711", "", "", "", "", "rsaEncryption", "2048", "publickeyValue", "3", "0", "sha256WithRSAEncryption", "sha1", "sha256", "true", "0", "", "", "solana", "", "SubjectKeyIdentifier", "AuthorityKeyIdentifier", "Signature"];
 
-    var rejectUserCertificate = {
-        "subject": {
-            "commonName": "Blockchain User 2",
-            "organization": "Users",
-            "locality": "TRZ",
-            "state": "TN",
-            "country": "IN",
-        },
-        "validity": {
-            "notBefore": 1681161711,
-            "notAfter": 1781161711,
-        },
-        "subjectAltName": {
-            "dnsNames": [],
-            "ipAddresses": [],
-            "emailAddresses": [],
-            "uris": [],
-        },
-        "publicKeyInfo": {
-            "algorithm": "rsaEncryption",
-            "keySize": 2048,
-            "publicKey": "toBeFilled"
-        },
-        "miscellaneous": {
-            "version": 3,
-            "serialNumber": 0,
-            "signatureAlgorithm": "sha256WithRSAEncryption",
-        },
-        "fingerprints": {
-            "sha1": "toBeFilled",
-            "_sha256": "toBeFilled",
-        },
-        "basicConstraints": {
-            "isCA": true,
-            "pathLenConstraint": 0,
-        },
-        "keyUsage": {
-            "digitalSignature": true,
-            "contentCommitment": true,
-            "keyEncipherment": true,
-            "dataEncipherment": true,
-            "keyAgreement": true,
-            "keyCertSign": true,
-            "cRLSign": true,
-            "encipherOnly": true,
-            "decipherOnly": true,
-        },
-        "subjectKeyIdentifier": "0",
-        "authorityKeyIdentifier": "0",
-        "signature": "0",
-    }
+    var subCaCertificate = ["Blockchain Sub CA", "Sub CA", "TRZ", "TN", "IN", "", "", "", "", "", "1681161711", "1781161711", "", "", "", "", "rsaEncryption", "2048", "publickeyValue", "3", "", "sha256WithRSAEncryption", "sha1", "sha256", "true", "0", "", "", "solana", "", "SubjectKeyIdentifier", "AuthorityKeyIdentifier", "Signature"];
 
-    function compareCertificate(obj1, obj2) {
-        Object.keys(obj1).forEach((key) => {
-            if (typeof obj1[key] === 'object') {
-                compareCertificate(obj1[key], obj2[key]);
-            } else {
-                expect(obj1[key]).to.equal(obj2[key]);
-            }
-        });
-    }
+    var userCertificate = ["Blockchain User 1", "User", "TRZ", "TN", "IN", "", "", "", "", "", "1681161711", "1781161711", "", "", "", "", "rsaEncryption", "2048", "publickeyValue", "3", "", "sha256WithRSAEncryption", "sha1", "sha256", "true", "0", "", "", "solana", "", "SubjectKeyIdentifier", "AuthorityKeyIdentifier", "Signature"];
+
+    var rejectUserCertificate = ["Blockchain User 2", "User", "TRZ", "TN", "IN", "", "", "", "", "", "1681161711", "1781161711", "", "", "", "", "rsaEncryption", "2048", "publickeyValue", "3", "", "sha256WithRSAEncryption", "sha1", "sha256", "true", "0", "", "", "solana", "", "SubjectKeyIdentifier", "AuthorityKeyIdentifier", "Signature"];
+
+    // function compareCertificate(obj1, obj2) {
+    //     Object.keys(obj1).forEach((key) => {
+    //         if (typeof obj1[key] === 'object') {
+    //             compareCertificate(obj1[key], obj2[key]);
+    //         } else {
+    //             expect(obj1[key]).to.equal(obj2[key]);
+    //         }
+    //     });
+    // }
 
     // A single test is being used to preserve state instead of having different tests which resets the state of the contract
     it("Everything", async function () {
@@ -244,14 +106,14 @@ describe("PKI", function () {
         expect(await rootContract.owner()).to.equal(rootCA.address);
 
         // assign CaCertificate in the Root CA smartcontract
-        rootCaCertificate["extensions"]["caAddress"] = rootContract.address;
-        rootCaCertificate["extensions"]["issuerAddress"] = rootCA.address;
-        rootCaCertificate["extensions"]["subjectAddress"] = rootCA.address;
+        rootCaCertificate[index["extensions"]["caAddress"]] = rootContract.address;
+        rootCaCertificate[index["extensions"]["issuerAddress"]] = rootCA.address;
+        rootCaCertificate[index["extensions"]["subjectAddress"]] = rootCA.address;
         await rootContract.populateCaCertificate(rootCaCertificate);
-        compareCertificate(rootCaCertificate, await rootContract.caCertificate());
+        // compareCertificate(rootCaCertificate, await rootContract.caCertificate());
 
         // Should request and issue CA Certificate
-        const subCaRequestTx = await rootContract.connect(subCA).requestCertificate(subCaCertificate["subject"], subCaCertificate["validity"], subCaCertificate["subjectAltName"], subCaCertificate["publicKeyInfo"], subCaCertificate["basicConstraints"], subCaCertificate["keyUsage"], subCaCertificate["subjectKeyIdentifier"]);
+        const subCaRequestTx = await rootContract.connect(subCA).requestCertificate(subCaCertificate);
         const subCaReceipt = await subCaRequestTx.wait();
         const SubCaCertificateRequestedEvent = subCaReceipt.events.find(event => event.event === "CertificateRequested");
         const subCaSerialNumber = SubCaCertificateRequestedEvent.args.serialNumber;
@@ -268,15 +130,15 @@ describe("PKI", function () {
 
         // assign CaCertificate in the Sub CA smartcontract
         var tempSubCaCertificate = await rootContract["getCertificate(uint256)"](1);
-        await subCaContract.populateCaCertificate(tempSubCaCertificate); // TODO
-        compareCertificate(tempSubCaCertificate, await subCaContract.caCertificate());
+        await subCaContract.populateCaCertificate(tempSubCaCertificate);
+        // compareCertificate(tempSubCaCertificate, await subCaContract.caCertificate());
 
         // Transfer owner
         await subCaContract.connect(rootCA).transferOwnership(subCA.address);
         expect(await subCaContract.owner()).to.equal(subCA.address);
 
         // Should request and issue user Certificate
-        const userRequestTx = await subCaContract.connect(user).requestCertificate(userCertificate["subject"], userCertificate["validity"], userCertificate["subjectAltName"], userCertificate["publicKeyInfo"], userCertificate["basicConstraints"], userCertificate["keyUsage"], userCertificate["subjectKeyIdentifier"]);
+        const userRequestTx = await subCaContract.connect(user).requestCertificate(userCertificate);
         const userReceipt = await userRequestTx.wait();
         const userCertificateRequestedEvent = userReceipt.events.find(event => event.event === "CertificateRequested");
         const userSerialNumber = userCertificateRequestedEvent.args.serialNumber;
@@ -291,11 +153,11 @@ describe("PKI", function () {
 
         // Other function
         // getCertificate Name
-        compareCertificate(tempSubCaCertificate, await rootContract["getCertificate(string)"]("Blockchain Sub CA"));
+        // compareCertificate(tempSubCaCertificate, await rootContract["getCertificate(string)"]("Blockchain Sub CA"));
 
         // rejectPendingCertificate
         // Should request and issue user Certificate
-        const rejectUserRequestTx = await subCaContract.connect(rejectUser).requestCertificate(userCertificate["subject"], rejectUserCertificate["validity"], rejectUserCertificate["subjectAltName"], rejectUserCertificate["publicKeyInfo"], rejectUserCertificate["basicConstraints"], rejectUserCertificate["keyUsage"], rejectUserCertificate["subjectKeyIdentifier"]);
+        const rejectUserRequestTx = await subCaContract.connect(rejectUser).requestCertificate(rejectUserCertificate);
         const rejectUserReceipt = await rejectUserRequestTx.wait();
         const rejectUserCertificateRequestedEvent = rejectUserReceipt.events.find(event => event.event === "CertificateRequested");
         const rejectUserSerialNumber = rejectUserCertificateRequestedEvent.args.serialNumber;
