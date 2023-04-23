@@ -94,13 +94,17 @@ contract PKI is owned {
     }
 
     uint _oldestPendingCertificate = 1;
-    string[33] public caCertificate;
+    string[33] caCertificate;
     string[33][] certificates; // columns then rows for initialization only
     mapping(string => uint) nameToSerialNumber; // common and alt name to serial number
     mapping(uint => Status) certificateStatus;
 
     function populateCaCertificate(string[33] memory cert) public onlyOwner {
         caCertificate = cert;
+    }
+
+    function getCaCertificate() public view returns (string[33] memory) {
+        return caCertificate;
     }
 
     event CertificateRequested(uint serialNumber, string commonName);
@@ -176,6 +180,9 @@ contract PKI is owned {
     function issueCertificate(string memory signature) public onlyOwner {
         certificates[_oldestPendingCertificate - 1][32] = signature;
         certificateStatus[_oldestPendingCertificate] = Status.Issued;
+        nameToSerialNumber[
+            certificates[_oldestPendingCertificate - 1][0]
+        ] = _oldestPendingCertificate; // commonName
         string memory temp = string.concat(
             certificates[_oldestPendingCertificate - 1][12],
             " "
@@ -258,7 +265,7 @@ contract PKI is owned {
     }
 
     // decimal string to uint
-    function stringToUint(string memory s) public pure returns (uint) {
+    function stringToUint(string memory s) private pure returns (uint) {
         bytes memory b = bytes(s);
         uint result = 0;
         for (uint256 i = 0; i < b.length; i++) {
@@ -277,7 +284,7 @@ contract PKI is owned {
                 keccak256(abi.encodePacked(("false")))));
     }
 
-    function toString(address account) public pure returns (string memory) {
+    function toString(address account) private pure returns (string memory) {
         return toString(abi.encodePacked(account));
     }
 
@@ -286,7 +293,7 @@ contract PKI is owned {
     //     return toString(abi.encodePacked(value));
     // }
 
-    function toString(bytes memory data) public pure returns (string memory) {
+    function toString(bytes memory data) private pure returns (string memory) {
         bytes memory alphabet = "0123456789abcdef";
 
         bytes memory str = new bytes(2 + data.length * 2);
@@ -301,7 +308,7 @@ contract PKI is owned {
 
     function uintToString(
         uint _i
-    ) internal pure returns (string memory _uintAsString) {
+    ) private pure returns (string memory _uintAsString) {
         if (_i == 0) {
             return "0";
         }
