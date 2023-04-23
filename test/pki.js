@@ -1,26 +1,35 @@
 const { expect } = require("chai");
 const { ethers } = require("hardhat");
-// const { generateKeyPairSync } = require('crypto');
+const { generateKeyPairSync, createPublicKey, createHash } = require('crypto');
 
 describe("PKI", function () {
 
-    // const { publicKey, privateKey } = generateKeyPairSync('rsa', {
-    //     modulusLength: 2048,
-    //     publicExponent: 0x10101,
-    //     publicKeyEncoding: {
-    //         type: 'spki',
-    //         format: 'der',
-    //     },
-    //     privateKeyEncoding: {
-    //         type: 'pkcs8',
-    //         format: 'der'
-    //     }
-    // });
+    function generateKeys() {
+        const { publicKey, privateKey } = generateKeyPairSync('ec', {
+            namedCurve: 'secp256k1',
+            publicKeyEncoding: {
+                type: 'spki',
+                format: 'pem'
+            },
+            privateKeyEncoding: {
+                type: 'pkcs8',
+                format: 'pem',
+                cipher: 'aes-256-cbc',
+                passphrase: 'top secret'
+            }
+        });
 
-    // // Prints asymmetric key pair
-    // console.log("The public key is: ", publicKey);
-    // console.log();
-    // console.log("The private key is: ", privateKey);
+        const publicKeyDer = createPublicKey(publicKey)
+            .export({
+                format: 'der',
+                type: 'spki'
+            });
+
+        const hexPublicKey = publicKeyDer.toString('hex');
+        const sha1 = createHash('sha1').update(publicKeyDer).digest('hex');
+        const subjectKeyIdentifier = sha1;
+        return { hexPublicKey, privateKey, subjectKeyIdentifier };
+    }
 
     const index = {
         "subject": {
@@ -78,23 +87,38 @@ describe("PKI", function () {
 
     // const keys = ["SubjectCommonName", "SubjectOrganization", "SubjectLocality", "SubjectState", "SubjectCountry", "IssuerCommonName", "IssuerOrganization", "IssuerLocality", "IssuerState", "IssuerCountry", "ValidityNotBefore", "ValidityNotAfter", "DnsNames", "IpAddresses", "EmailAddresses", "URIs", "PublicKeyAlgorithm", "PublicKeySize", "PublicKeyValue", "Version", "SerialNumber", "SignatureAlgorithm", "SHA1", "SHA256", "IsCA", "PathLengthConstraint", "SubjectAddress", "IssuerAddress", "BlockchainName", "CaAddress", "SubjectKeyIdentifier", "AuthorityKeyIdentifier", "Signature"];
 
-    var rootCaCertificate = ["Blockchain Root CA", "Root CA", "TRZ", "TN", "IN", "Blockchain Root CA", "Root CA", "TRZ", "TN", "IN", "1681161711", "1781161711", "", "", "", "", "rsaEncryption", "2048", "publickeyValue", "3", "0", "sha256WithRSAEncryption", "sha1", "sha256", "true", "0", "", "", "solana", "", "SubjectKeyIdentifier", "AuthorityKeyIdentifier", "Signature"];
+    var { hexPublicKey, privateKey, subjectKeyIdentifier } = generateKeys();
+    var rootCaCertificate = ["Blockchain Root CA", "Root CA", "TRZ", "TN", "IN", "Blockchain Root CA", "Root CA", "TRZ", "TN", "IN", "1681161711", "1781161711", "", "", "", "", "", "", "", "3", "0", "sha256WithRSAEncryption", "sha1", "sha256", "true", "0", "", "", "Sepolia", "", "SubjectKeyIdentifier", "AuthorityKeyIdentifier", "Signature"];
+    rootCaCertificate[index['publicKeyInfo']['publicKey']] = hexPublicKey;
+    rootCaCertificate[index['publicKeyInfo']['keySize']] = '256';
+    rootCaCertificate[index['publicKeyInfo']['algorithm']] = 'Elliptic Curve';
+    rootCaCertificate[index['subjectKeyIdentifier']] = subjectKeyIdentifier;
 
-    var subCaCertificate = ["Blockchain Sub CA", "Sub CA", "TRZ", "TN", "IN", "", "", "", "", "", "1681161711", "1781161711", "", "", "", "", "rsaEncryption", "2048", "publickeyValue", "3", "", "sha256WithRSAEncryption", "sha1", "sha256", "true", "0", "", "", "solana", "", "SubjectKeyIdentifier", "AuthorityKeyIdentifier", "Signature"];
+    var { hexPublicKey, privateKey, subjectKeyIdentifier } = generateKeys();
+    var subCaCertificate = ["Blockchain Sub CA", "Sub CA", "TRZ", "TN", "IN", "", "", "", "", "", "1681161711", "1781161711", "", "", "", "", "", "", "", "3", "", "sha256WithRSAEncryption", "sha1", "sha256", "true", "0", "", "", "Sepolia", "", "SubjectKeyIdentifier", "AuthorityKeyIdentifier", "Signature"];
+    subCaCertificate[index['publicKeyInfo']['publicKey']] = hexPublicKey;
+    subCaCertificate[index['publicKeyInfo']['keySize']] = '256';
+    subCaCertificate[index['publicKeyInfo']['algorithm']] = 'Elliptic Curve';
+    subCaCertificate[index['subjectKeyIdentifier']] = subjectKeyIdentifier;
 
-    var userCertificate = ["Blockchain User 1", "User", "TRZ", "TN", "IN", "", "", "", "", "", "1681161711", "1781161711", "", "", "", "", "rsaEncryption", "2048", "publickeyValue", "3", "", "sha256WithRSAEncryption", "sha1", "sha256", "true", "0", "", "", "solana", "", "SubjectKeyIdentifier", "AuthorityKeyIdentifier", "Signature"];
+    var { hexPublicKey, privateKey, subjectKeyIdentifier } = generateKeys();
+    var userCertificate = ["Blockchain User 1", "User", "TRZ", "TN", "IN", "", "", "", "", "", "1681161711", "1781161711", "", "", "", "", "", "", "", "3", "", "sha256WithRSAEncryption", "sha1", "sha256", "true", "0", "", "", "Sepolia", "", "SubjectKeyIdentifier", "AuthorityKeyIdentifier", "Signature"];
+    userCertificate[index['publicKeyInfo']['publicKey']] = hexPublicKey;
+    userCertificate[index['publicKeyInfo']['keySize']] = '256';
+    userCertificate[index['publicKeyInfo']['algorithm']] = 'Elliptic Curve';
+    userCertificate[index['subjectKeyIdentifier']] = subjectKeyIdentifier;
 
-    var rejectUserCertificate = ["Blockchain User 2", "User", "TRZ", "TN", "IN", "", "", "", "", "", "1681161711", "1781161711", "", "", "", "", "rsaEncryption", "2048", "publickeyValue", "3", "", "sha256WithRSAEncryption", "sha1", "sha256", "true", "0", "", "", "solana", "", "SubjectKeyIdentifier", "AuthorityKeyIdentifier", "Signature"];
+    var { hexPublicKey, privateKey, subjectKeyIdentifier } = generateKeys();
+    var rejectUserCertificate = ["Blockchain User 2", "User", "TRZ", "TN", "IN", "", "", "", "", "", "1681161711", "1781161711", "", "", "", "", "", "", "", "3", "", "sha256WithRSAEncryption", "sha1", "sha256", "true", "0", "", "", "Sepolia", "", "SubjectKeyIdentifier", "AuthorityKeyIdentifier", "Signature"];
+    rejectUserCertificate[index['publicKeyInfo']['publicKey']] = hexPublicKey;
+    rejectUserCertificate[index['publicKeyInfo']['keySize']] = '256';
+    rejectUserCertificate[index['publicKeyInfo']['algorithm']] = 'Elliptic Curve';
+    rejectUserCertificate[index['subjectKeyIdentifier']] = subjectKeyIdentifier;
 
-    // function compareCertificate(obj1, obj2) {
-    //     Object.keys(obj1).forEach((key) => {
-    //         if (typeof obj1[key] === 'object') {
-    //             compareCertificate(obj1[key], obj2[key]);
-    //         } else {
-    //             expect(obj1[key]).to.equal(obj2[key]);
-    //         }
-    //     });
-    // }
+    console.log(rootCaCertificate);
+    console.log(subCaCertificate);
+    console.log(userCertificate);
+    console.log(rejectUserCertificate);
 
     // A single test is being used to preserve state instead of having different tests which resets the state of the contract
     it("Everything", async function () {
@@ -110,7 +134,7 @@ describe("PKI", function () {
         rootCaCertificate[index["extensions"]["issuerAddress"]] = rootCA.address;
         rootCaCertificate[index["extensions"]["subjectAddress"]] = rootCA.address;
         await rootContract.populateCaCertificate(rootCaCertificate);
-        // compareCertificate(rootCaCertificate, await rootContract.caCertificate());
+        expect(rootCaCertificate).to.deep.equal(await rootContract.getCaCertificate());
 
         // Should request and issue CA Certificate
         const subCaRequestTx = await rootContract.connect(subCA).requestCertificate(subCaCertificate);
@@ -131,7 +155,7 @@ describe("PKI", function () {
         // assign CaCertificate in the Sub CA smartcontract
         var tempSubCaCertificate = await rootContract["getCertificate(uint256)"](1);
         await subCaContract.populateCaCertificate(tempSubCaCertificate);
-        // compareCertificate(tempSubCaCertificate, await subCaContract.caCertificate());
+        expect(tempSubCaCertificate).to.deep.equal(await subCaContract.getCaCertificate());
 
         // Transfer owner
         await subCaContract.connect(rootCA).transferOwnership(subCA.address);
@@ -153,7 +177,7 @@ describe("PKI", function () {
 
         // Other function
         // getCertificate Name
-        // compareCertificate(tempSubCaCertificate, await rootContract["getCertificate(string)"]("Blockchain Sub CA"));
+        expect(tempSubCaCertificate).to.deep.equal(await rootContract["getCertificate(string)"]("Blockchain Sub CA"));
 
         // rejectPendingCertificate
         // Should request and issue user Certificate
