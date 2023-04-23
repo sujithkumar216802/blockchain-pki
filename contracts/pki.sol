@@ -93,7 +93,7 @@ contract PKI is owned {
         Expired
     }
 
-    uint _oldestPendingCertificate = 1;
+    uint public oldestPendingCertificateSerialNumber = 1;
     string[33] caCertificate;
     string[33][] certificates; // columns then rows for initialization only
     mapping(string => uint) nameToSerialNumber; // common and alt name to serial number
@@ -170,42 +170,46 @@ contract PKI is owned {
 
     // rejects the oldest pending certificate
     function rejectPendingCertificate() public onlyOwner {
-        require(certificateStatus[_oldestPendingCertificate] == Status.Pending);
-        certificateStatus[_oldestPendingCertificate] = Status.Rejected;
-        _oldestPendingCertificate++;
+        require(certificateStatus[oldestPendingCertificateSerialNumber] == Status.Pending);
+        certificateStatus[oldestPendingCertificateSerialNumber] = Status.Rejected;
+        oldestPendingCertificateSerialNumber++;
     }
 
     // TODO: fingerprint, check for existing altnames
     // issues the oldest pending certificate
-    function issueCertificate(string memory signature) public onlyOwner {
-        certificates[_oldestPendingCertificate - 1][32] = signature;
-        certificateStatus[_oldestPendingCertificate] = Status.Issued;
+    function issuePendingCertificate(
+        string memory signature,
+        string memory caAddress
+    ) public onlyOwner {
+        certificates[oldestPendingCertificateSerialNumber - 1][32] = signature;
+        certificates[oldestPendingCertificateSerialNumber - 1][29] = caAddress;
+        certificateStatus[oldestPendingCertificateSerialNumber] = Status.Issued;
         nameToSerialNumber[
-            certificates[_oldestPendingCertificate - 1][0]
-        ] = _oldestPendingCertificate; // commonName
+            certificates[oldestPendingCertificateSerialNumber - 1][0]
+        ] = oldestPendingCertificateSerialNumber; // commonName
         string memory temp = string.concat(
-            certificates[_oldestPendingCertificate - 1][12],
+            certificates[oldestPendingCertificateSerialNumber - 1][12],
             " "
         );
         string memory temp1 = string.concat(
             temp,
-            certificates[_oldestPendingCertificate - 1][13]
+            certificates[oldestPendingCertificateSerialNumber - 1][13]
         );
         string memory temp2 = string.concat(temp1, " ");
         string memory temp3 = string.concat(
             temp2,
-            certificates[_oldestPendingCertificate - 1][14]
+            certificates[oldestPendingCertificateSerialNumber - 1][14]
         );
         string memory temp4 = string.concat(temp3, " ");
         string memory temp5 = string.concat(
             temp4,
-            certificates[_oldestPendingCertificate - 1][15]
+            certificates[oldestPendingCertificateSerialNumber - 1][15]
         );
         string[] memory altNames = stringToStringArray(temp5, " ");
         for (uint i = 0; i < altNames.length; i++) {
-            nameToSerialNumber[altNames[i]] = _oldestPendingCertificate;
+            nameToSerialNumber[altNames[i]] = oldestPendingCertificateSerialNumber;
         }
-        _oldestPendingCertificate++;
+        oldestPendingCertificateSerialNumber++;
     }
 
     function getCertificate(
@@ -229,7 +233,7 @@ contract PKI is owned {
     }
 
     function isPendingCertificate() public view onlyOwner returns (bool) {
-        return _oldestPendingCertificate <= certificates.length;
+        return oldestPendingCertificateSerialNumber <= certificates.length;
     }
 
     function getPendingCertificate()
@@ -239,10 +243,10 @@ contract PKI is owned {
         returns (string[33] memory)
     {
         require(
-            _oldestPendingCertificate <= certificates.length,
+            oldestPendingCertificateSerialNumber <= certificates.length,
             "No pending certificates"
         );
-        return certificates[_oldestPendingCertificate - 1];
+        return certificates[oldestPendingCertificateSerialNumber - 1];
     }
 
     // 0 - pending, 1 - issued, 2 - revoked, 3 - rejected, 4 - expired

@@ -136,21 +136,23 @@ describe("PKI", function () {
         await rootContract.populateCaCertificate(rootCaCertificate);
         expect(rootCaCertificate).to.deep.equal(await rootContract.getCaCertificate());
 
-        // Should request and issue CA Certificate
+        // Should request CA Certificate
         const subCaRequestTx = await rootContract.connect(subCA).requestCertificate(subCaCertificate);
         const subCaReceipt = await subCaRequestTx.wait();
         const SubCaCertificateRequestedEvent = subCaReceipt.events.find(event => event.event === "CertificateRequested");
         const subCaSerialNumber = SubCaCertificateRequestedEvent.args.serialNumber;
         expect(subCaSerialNumber).to.equal(1);
         expect(await rootContract.getCertificateStatus(subCaSerialNumber)).to.equal(0);
-        await rootContract.issueCertificate("toBeFilled");
-        expect(await rootContract.getCertificateStatus(subCaSerialNumber)).to.equal(1);
 
 
 
         // Deploy Sub CA
         const subCaContract = await PKI.connect(rootCA).deploy();
         expect(await subCaContract.owner()).to.equal(rootCA.address);
+
+        // Should Issue CA Certificate
+        await rootContract.issuePendingCertificate("toBeFilled", subCaContract.address);
+        expect(await rootContract.getCertificateStatus(subCaSerialNumber)).to.equal(1);
 
         // assign CaCertificate in the Sub CA smartcontract
         var tempSubCaCertificate = await rootContract["getCertificate(uint256)"](1);
@@ -168,7 +170,7 @@ describe("PKI", function () {
         const userSerialNumber = userCertificateRequestedEvent.args.serialNumber;
         expect(userSerialNumber).to.equal(1);
         expect(await subCaContract.getCertificateStatus(userSerialNumber)).to.equal(0);
-        await subCaContract.connect(subCA).issueCertificate("toBeFilled");
+        await subCaContract.connect(subCA).issuePendingCertificate("toBeFilled", "");
         expect(await subCaContract.getCertificateStatus(userSerialNumber)).to.equal(1);
 
         // Revoke user
