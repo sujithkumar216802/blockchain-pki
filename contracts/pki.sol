@@ -228,6 +228,10 @@ contract PKI is owned {
         certificateStatus[serialNumber] = Status.Revoked;
     }
 
+    function isPendingCertificate() public view onlyOwner returns (bool) {
+        return _oldestPendingCertificate <= certificates.length;
+    }
+
     function getPendingCertificate()
         public
         view
