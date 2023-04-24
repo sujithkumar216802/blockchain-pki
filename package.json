@@ -3,5 +3,10 @@
   "devDependencies": {
     "@nomicfoundation/hardhat-toolbox": "^2.0.2",
     "hardhat": "^2.14.0"
+  },
+  "dependencies": {
+    "asn1js": "^3.0.5",
+    "pkijs": "^3.0.14",
+    "pvutils": "^1.1.3"
   }
 }
