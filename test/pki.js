@@ -1,8 +1,8 @@
 const { expect } = require("chai");
 const { ethers } = require("hardhat");
-const { PublicKeyInfo, CertificationRequest, AttributeTypeAndValue, setEngine, CryptoEngine } = require('pkijs');
-const { PrintableString, Utf8String, fromBER } = require('asn1js');
-const { generateKeyPairSync, createPublicKey, createPrivateKey, createHash, webcrypto, subtle } = require('crypto');
+const { PublicKeyInfo, CertificationRequest, AttributeTypeAndValue, setEngine, CryptoEngine, Certificate, AlgorithmIdentifier, Extension, BasicConstraints } = require('pkijs');
+const { PrintableString, Utf8String, fromBER, Integer, Null, BitString } = require('asn1js');
+const { generateKeyPairSync, createPublicKey, createPrivateKey, createHash, webcrypto, subtle, sign } = require('crypto');
 const { arrayBufferToString, toBase64 } = require('pvutils');
 
 describe("PKI", function () {
@@ -95,7 +95,7 @@ describe("PKI", function () {
     }
 
     async function generateCSR(cert, publicKey, privateKey) {
-        var csr = new CertificationRequest();
+        const csr = new CertificationRequest();
 
         csr.version = 0;
         csr.subject.typesAndValues.push(new AttributeTypeAndValue({
@@ -156,15 +156,15 @@ describe("PKI", function () {
     }
 
     var { hexPublicKey, publicKey, privateKey, subjectKeyIdentifier } = generateKeys();
-    const rootPublicKey = publicKey;
-    const rootPrivateKey = privateKey;
+    const rootCaPublicKey = publicKey;
+    const rootCaPrivateKey = privateKey;
     const rootCaCertificate = ["Blockchain Root CA", "Root CA", "TRZ", "TN", "IN", "Blockchain Root CA", "Root CA", "TRZ", "TN", "IN", "1681161711", "1781161711", "", "", "", "", "", "", "", "3", "0", "", "sha1", "sha256", "true", "0", "", "", "Sepolia", "", "SubjectKeyIdentifier", "AuthorityKeyIdentifier", "Signature"];
     rootCaCertificate[index['publicKeyInfo']['publicKey']] = hexPublicKey;
     rootCaCertificate[index['publicKeyInfo']['keySize']] = '256';
     rootCaCertificate[index['publicKeyInfo']['algorithm']] = 'Elliptic Curve';
     rootCaCertificate[index['subjectKeyIdentifier']] = subjectKeyIdentifier;
     console.log('rootCaCertificate: ', rootCaCertificate);
-    console.log('Root Private Key: ', createPrivateKey({ key: rootPrivateKey, type: 'pkcs8', format: 'pem', passphrase: passphrase }).export({
+    console.log('Root Private Key: ', createPrivateKey({ key: rootCaPrivateKey, type: 'pkcs8', format: 'pem', passphrase: passphrase }).export({
         format: 'pem',
         type: 'pkcs8',
     }));
@@ -220,6 +220,112 @@ describe("PKI", function () {
         await rootContract.deployed();
         expect(await rootContract.owner()).to.equal(rootCA.address);
 
+
+
+
+
+        // generate a self signed certificate
+        const issuedRootCaCertificate = new Certificate()
+        issuedRootCaCertificate.version = 2;
+        issuedRootCaCertificate.serialNumber = new Integer({ value: 0 });
+
+        issuedRootCaCertificate.subject.typesAndValues.push(new AttributeTypeAndValue({
+            type: '2.5.4.3', //commonName
+            value: new Utf8String({ value: rootCaCertificate[index['subject']['commonName']] })
+        }));
+
+        issuedRootCaCertificate.subject.typesAndValues.push(new AttributeTypeAndValue({
+            type: "2.5.4.6", // Country name
+            value: new PrintableString({ value: rootCaCertificate[index['subject']['country']] })
+        }));
+
+        issuedRootCaCertificate.subject.typesAndValues.push(new AttributeTypeAndValue({
+            type: '2.5.4.7', //localityName
+            value: new Utf8String({ value: rootCaCertificate[index['subject']['locality']] })
+        }));
+
+        issuedRootCaCertificate.subject.typesAndValues.push(new AttributeTypeAndValue({
+            type: '2.5.4.8', //stateOrProvinceName
+            value: new Utf8String({ value: rootCaCertificate[index['subject']['state']] })
+        }));
+
+        issuedRootCaCertificate.subject.typesAndValues.push(new AttributeTypeAndValue({
+            type: '2.5.4.10', //organizationName
+            value: new Utf8String({ value: rootCaCertificate[index['subject']['organization']] })
+        }));
+
+
+        issuedRootCaCertificate.issuer.typesAndValues.push(new AttributeTypeAndValue({
+            type: '2.5.4.3', //commonName
+            value: new Utf8String({ value: rootCaCertificate[index['subject']['commonName']] })
+        }));
+
+        issuedRootCaCertificate.issuer.typesAndValues.push(new AttributeTypeAndValue({
+            type: "2.5.4.6", // Country name
+            value: new PrintableString({ value: rootCaCertificate[index['subject']['country']] })
+        }));
+
+        issuedRootCaCertificate.issuer.typesAndValues.push(new AttributeTypeAndValue({
+            type: '2.5.4.7', //localityName
+            value: new Utf8String({ value: rootCaCertificate[index['subject']['locality']] })
+        }));
+
+        issuedRootCaCertificate.issuer.typesAndValues.push(new AttributeTypeAndValue({
+            type: '2.5.4.8', //stateOrProvinceName
+            value: new Utf8String({ value: rootCaCertificate[index['subject']['state']] })
+        }));
+
+        issuedRootCaCertificate.issuer.typesAndValues.push(new AttributeTypeAndValue({
+            type: '2.5.4.10', //organizationName
+            value: new Utf8String({ value: rootCaCertificate[index['subject']['organization']] })
+        }));
+
+        // Set the public key
+        const berRootCaPublicKey = createPublicKey(rootCaPublicKey).export({ type: 'spki', format: 'der' });
+        const asn1 = fromBER(berRootCaPublicKey);
+        const pubKey = new PublicKeyInfo({ schema: asn1.result });
+        issuedRootCaCertificate.subjectPublicKeyInfo = pubKey;
+
+        // Set the validity period (1 year)
+        const notBefore = new Date();
+        const notAfter = new Date(notBefore);
+        notAfter.setFullYear(notBefore.getFullYear() + 1);
+        issuedRootCaCertificate.notBefore.value = notBefore;
+        issuedRootCaCertificate.notAfter.value = notAfter;
+
+        const basicConstr = new BasicConstraints({
+            cA: true,
+            pathLenConstraint: 3
+        });
+        issuedRootCaCertificate.extensions = [];
+        issuedRootCaCertificate.extensions.push(new Extension({
+            extnID: "2.5.29.19",
+            critical: false,
+            extnValue: basicConstr.toSchema().toBER(false),
+            parsedValue: basicConstr // Parsed value for well-known extensions
+        }));
+
+        // Sign the certificate with the private key
+        const pemRootCaPrivateKey = createPrivateKey({ key: rootCaPrivateKey, type: 'pkcs8', format: 'pem', passphrase: passphrase }).export({
+            format: 'pem',
+            type: 'pkcs8',
+        });
+
+        const signature = sign('sha256', Buffer.from(issuedRootCaCertificate.toSchema(true).toBER()), pemRootCaPrivateKey);
+        issuedRootCaCertificate.signature = new AlgorithmIdentifier({
+            algorithm: '1.2.840.10045.4.3.2', // ecdsa-with-SHA256
+            parameters: new Null()
+        });
+        issuedRootCaCertificate.signatureValue = new BitString({ valueHex: signature });
+
+        // // Encode the certificate as PEM
+        const issuedRootCaCertificatePEM = issuedRootCaCertificate.toSchema(true).toBER(false);
+        // const issuedRootCaCertificatePEMFormatted = pemFromBin(issuedRootCaCertificatePEM, 'CERTIFICATE');
+
+
+
+
+
         // assign CaCertificate in the Root CA smartcontract
         rootCaCertificate[index["extensions"]["caAddress"]] = rootContract.address;
         rootCaCertificate[index["extensions"]["issuerAddress"]] = rootCA.address;
@@ -235,8 +341,8 @@ describe("PKI", function () {
         expect(subCaSerialNumber).to.equal(1);
         expect(await rootContract.getCertificateStatus(subCaSerialNumber)).to.equal(0);
 
+        // sub ca generating a csr
         const subCSR = await generateCSR(subCaCertificate, subCaPublicKey, subCaPrivateKey);
-
 
         // Deploy Sub CA
         const subCaContract = await PKI.connect(rootCA).deploy();
@@ -247,9 +353,9 @@ describe("PKI", function () {
         expect(await rootContract.getCertificateStatus(subCaSerialNumber)).to.equal(1);
 
         // assign CaCertificate in the Sub CA smartcontract
-        var tempSubCaCertificate = await rootContract["getCertificate(uint256)"](1);
-        await subCaContract.populateCaCertificate(tempSubCaCertificate);
-        expect(tempSubCaCertificate).to.deep.equal(await subCaContract.getCaCertificate());
+        const issuedSubCaCertificateFromContract = await rootContract["getCertificate(uint256)"](1);
+        await subCaContract.populateCaCertificate(issuedSubCaCertificateFromContract);
+        expect(issuedSubCaCertificateFromContract).to.deep.equal(await subCaContract.getCaCertificate());
 
         // Transfer owner
         await subCaContract.connect(rootCA).transferOwnership(subCA.address);
@@ -271,7 +377,7 @@ describe("PKI", function () {
 
         // Other function
         // getCertificate Name
-        expect(tempSubCaCertificate).to.deep.equal(await rootContract["getCertificate(string)"]("Blockchain Sub CA"));
+        expect(issuedSubCaCertificateFromContract).to.deep.equal(await rootContract["getCertificate(string)"]("Blockchain Sub CA"));
 
         // rejectPendingCertificate
         // Should request and issue user Certificate
