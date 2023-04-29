@@ -155,6 +155,107 @@ describe("PKI", function () {
         )}\n-----END CERTIFICATE REQUEST-----`;
     }
 
+    function issueCertificate(issuer, subject, issuerPrivateKey, subjectPublicKey, password) {
+
+        const certificate = new Certificate()
+        certificate.version = 2;
+        certificate.serialNumber = new Integer({ value: subject[index['miscellaneous']['serialNumber']] });
+
+        certificate.subject.typesAndValues.push(new AttributeTypeAndValue({
+            type: '2.5.4.3', //commonName
+            value: new Utf8String({ value: subject[index['subject']['commonName']] })
+        }));
+
+        certificate.subject.typesAndValues.push(new AttributeTypeAndValue({
+            type: "2.5.4.6", // Country name
+            value: new PrintableString({ value: subject[index['subject']['country']] })
+        }));
+
+        certificate.subject.typesAndValues.push(new AttributeTypeAndValue({
+            type: '2.5.4.7', //localityName
+            value: new Utf8String({ value: subject[index['subject']['locality']] })
+        }));
+
+        certificate.subject.typesAndValues.push(new AttributeTypeAndValue({
+            type: '2.5.4.8', //stateOrProvinceName
+            value: new Utf8String({ value: subject[index['subject']['state']] })
+        }));
+
+        certificate.subject.typesAndValues.push(new AttributeTypeAndValue({
+            type: '2.5.4.10', //organizationName
+            value: new Utf8String({ value: subject[index['subject']['organization']] })
+        }));
+
+
+        certificate.issuer.typesAndValues.push(new AttributeTypeAndValue({
+            type: '2.5.4.3', //commonName
+            value: new Utf8String({ value: issuer[index['subject']['commonName']] })
+        }));
+
+        certificate.issuer.typesAndValues.push(new AttributeTypeAndValue({
+            type: "2.5.4.6", // Country name
+            value: new PrintableString({ value: issuer[index['subject']['country']] })
+        }));
+
+        certificate.issuer.typesAndValues.push(new AttributeTypeAndValue({
+            type: '2.5.4.7', //localityName
+            value: new Utf8String({ value: issuer[index['subject']['locality']] })
+        }));
+
+        certificate.issuer.typesAndValues.push(new AttributeTypeAndValue({
+            type: '2.5.4.8', //stateOrProvinceName
+            value: new Utf8String({ value: issuer[index['subject']['state']] })
+        }));
+
+        certificate.issuer.typesAndValues.push(new AttributeTypeAndValue({
+            type: '2.5.4.10', //organizationName
+            value: new Utf8String({ value: issuer[index['subject']['organization']] })
+        }));
+
+        // Set the public key
+        const berPublicKey = createPublicKey(subjectPublicKey).export({ type: 'spki', format: 'der' });
+        const asn1 = fromBER(berPublicKey);
+        const pubKey = new PublicKeyInfo({ schema: asn1.result });
+        certificate.subjectPublicKeyInfo = pubKey;
+
+        // Set the validity period (1 year)
+        const notBefore = new Date();
+        const notAfter = new Date(notBefore);
+        notAfter.setFullYear(notBefore.getFullYear() + 1);
+        certificate.notBefore.value = notBefore;
+        certificate.notAfter.value = notAfter;
+
+        const basicConstr = new BasicConstraints({
+            cA: true,
+            pathLenConstraint: 3
+        });
+        certificate.extensions = [];
+        certificate.extensions.push(new Extension({
+            extnID: "2.5.29.19",
+            critical: false,
+            extnValue: basicConstr.toSchema().toBER(false),
+            parsedValue: basicConstr // Parsed value for well-known extensions
+        }));
+
+        // Sign the certificate with the private key
+        const pemPrivateKey = createPrivateKey({ key: issuerPrivateKey, type: 'pkcs8', format: 'pem', passphrase: password }).export({
+            format: 'pem',
+            type: 'pkcs8',
+        });
+
+        const signature = sign('sha256', Buffer.from(certificate.toSchema(true).toBER()), pemPrivateKey);
+        certificate.signature = new AlgorithmIdentifier({
+            algorithm: '1.2.840.10045.4.3.2', // ecdsa-with-SHA256
+            parameters: new Null()
+        });
+        certificate.signatureValue = new BitString({ valueHex: signature });
+
+        // // Encode the certificate as PEM
+        const issuedCertificatePEM = certificate.toSchema(true).toBER(false);
+        return issuedCertificatePEM;
+        // const issuedRootCaCertificatePEMFormatted = pemFromBin(issuedRootCaCertificatePEM, 'CERTIFICATE');
+    }
+
     var { hexPublicKey, publicKey, privateKey, subjectKeyIdentifier } = generateKeys();
     const rootCaPublicKey = publicKey;
     const rootCaPrivateKey = privateKey;
@@ -220,111 +321,8 @@ describe("PKI", function () {
         await rootContract.deployed();
         expect(await rootContract.owner()).to.equal(rootCA.address);
 
-
-
-
-
         // generate a self signed certificate
-        const issuedRootCaCertificate = new Certificate()
-        issuedRootCaCertificate.version = 2;
-        issuedRootCaCertificate.serialNumber = new Integer({ value: 0 });
-
-        issuedRootCaCertificate.subject.typesAndValues.push(new AttributeTypeAndValue({
-            type: '2.5.4.3', //commonName
-            value: new Utf8String({ value: rootCaCertificate[index['subject']['commonName']] })
-        }));
-
-        issuedRootCaCertificate.subject.typesAndValues.push(new AttributeTypeAndValue({
-            type: "2.5.4.6", // Country name
-            value: new PrintableString({ value: rootCaCertificate[index['subject']['country']] })
-        }));
-
-        issuedRootCaCertificate.subject.typesAndValues.push(new AttributeTypeAndValue({
-            type: '2.5.4.7', //localityName
-            value: new Utf8String({ value: rootCaCertificate[index['subject']['locality']] })
-        }));
-
-        issuedRootCaCertificate.subject.typesAndValues.push(new AttributeTypeAndValue({
-            type: '2.5.4.8', //stateOrProvinceName
-            value: new Utf8String({ value: rootCaCertificate[index['subject']['state']] })
-        }));
-
-        issuedRootCaCertificate.subject.typesAndValues.push(new AttributeTypeAndValue({
-            type: '2.5.4.10', //organizationName
-            value: new Utf8String({ value: rootCaCertificate[index['subject']['organization']] })
-        }));
-
-
-        issuedRootCaCertificate.issuer.typesAndValues.push(new AttributeTypeAndValue({
-            type: '2.5.4.3', //commonName
-            value: new Utf8String({ value: rootCaCertificate[index['subject']['commonName']] })
-        }));
-
-        issuedRootCaCertificate.issuer.typesAndValues.push(new AttributeTypeAndValue({
-            type: "2.5.4.6", // Country name
-            value: new PrintableString({ value: rootCaCertificate[index['subject']['country']] })
-        }));
-
-        issuedRootCaCertificate.issuer.typesAndValues.push(new AttributeTypeAndValue({
-            type: '2.5.4.7', //localityName
-            value: new Utf8String({ value: rootCaCertificate[index['subject']['locality']] })
-        }));
-
-        issuedRootCaCertificate.issuer.typesAndValues.push(new AttributeTypeAndValue({
-            type: '2.5.4.8', //stateOrProvinceName
-            value: new Utf8String({ value: rootCaCertificate[index['subject']['state']] })
-        }));
-
-        issuedRootCaCertificate.issuer.typesAndValues.push(new AttributeTypeAndValue({
-            type: '2.5.4.10', //organizationName
-            value: new Utf8String({ value: rootCaCertificate[index['subject']['organization']] })
-        }));
-
-        // Set the public key
-        const berRootCaPublicKey = createPublicKey(rootCaPublicKey).export({ type: 'spki', format: 'der' });
-        const asn1 = fromBER(berRootCaPublicKey);
-        const pubKey = new PublicKeyInfo({ schema: asn1.result });
-        issuedRootCaCertificate.subjectPublicKeyInfo = pubKey;
-
-        // Set the validity period (1 year)
-        const notBefore = new Date();
-        const notAfter = new Date(notBefore);
-        notAfter.setFullYear(notBefore.getFullYear() + 1);
-        issuedRootCaCertificate.notBefore.value = notBefore;
-        issuedRootCaCertificate.notAfter.value = notAfter;
-
-        const basicConstr = new BasicConstraints({
-            cA: true,
-            pathLenConstraint: 3
-        });
-        issuedRootCaCertificate.extensions = [];
-        issuedRootCaCertificate.extensions.push(new Extension({
-            extnID: "2.5.29.19",
-            critical: false,
-            extnValue: basicConstr.toSchema().toBER(false),
-            parsedValue: basicConstr // Parsed value for well-known extensions
-        }));
-
-        // Sign the certificate with the private key
-        const pemRootCaPrivateKey = createPrivateKey({ key: rootCaPrivateKey, type: 'pkcs8', format: 'pem', passphrase: passphrase }).export({
-            format: 'pem',
-            type: 'pkcs8',
-        });
-
-        const signature = sign('sha256', Buffer.from(issuedRootCaCertificate.toSchema(true).toBER()), pemRootCaPrivateKey);
-        issuedRootCaCertificate.signature = new AlgorithmIdentifier({
-            algorithm: '1.2.840.10045.4.3.2', // ecdsa-with-SHA256
-            parameters: new Null()
-        });
-        issuedRootCaCertificate.signatureValue = new BitString({ valueHex: signature });
-
-        // // Encode the certificate as PEM
-        const issuedRootCaCertificatePEM = issuedRootCaCertificate.toSchema(true).toBER(false);
-        // const issuedRootCaCertificatePEMFormatted = pemFromBin(issuedRootCaCertificatePEM, 'CERTIFICATE');
-
-
-
-
+        const rootCaCertificatePEM = issueCertificate(rootCaCertificate, rootCaCertificate, rootCaPrivateKey, rootCaPublicKey, passphrase);
 
         // assign CaCertificate in the Root CA smartcontract
         rootCaCertificate[index["extensions"]["caAddress"]] = rootContract.address;
