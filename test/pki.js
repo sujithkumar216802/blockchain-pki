@@ -155,7 +155,7 @@ describe("PKI", function () {
         )}\n-----END CERTIFICATE REQUEST-----`;
     }
 
-    function issueCertificate(issuer, subject, issuerPrivateKey, subjectPublicKey, password) {
+    async function issueCertificate(issuer, subject, issuerPrivateKey, subjectPublicKey, password) {
 
         const certificate = new Certificate()
         certificate.version = 2;
@@ -238,22 +238,27 @@ describe("PKI", function () {
         }));
 
         // Sign the certificate with the private key
-        const pemPrivateKey = createPrivateKey({ key: issuerPrivateKey, type: 'pkcs8', format: 'pem', passphrase: password }).export({
-            format: 'pem',
+        const berPrivateKey = createPrivateKey({ key: issuerPrivateKey, type: 'pkcs8', format: 'pem', passphrase: password }).export({
+            format: 'der',
             type: 'pkcs8',
         });
+        setEngine('OpenSSL', webcrypto, new CryptoEngine({
+            name: 'OpenSSL',
+            crypto: webcrypto,
+            subtle: webcrypto.subtle
+        }));
 
-        const signature = sign('sha256', Buffer.from(certificate.toSchema(true).toBER()), pemPrivateKey);
-        certificate.signature = new AlgorithmIdentifier({
-            algorithm: '1.2.840.10045.4.3.2', // ecdsa-with-SHA256
-            parameters: new Null()
-        });
-        certificate.signatureValue = new BitString({ valueHex: signature });
+        const cryptoPrivateKey = await subtle.importKey('pkcs8', berPrivateKey, { name: 'ECDSA', namedCurve: 'P-256' }, true, ['sign']);
 
-        // // Encode the certificate as PEM
-        const issuedCertificatePEM = certificate.toSchema(true).toBER(false);
-        return issuedCertificatePEM;
-        // const issuedRootCaCertificatePEMFormatted = pemFromBin(issuedRootCaCertificatePEM, 'CERTIFICATE');
+        await certificate.sign(cryptoPrivateKey, 'SHA-256');
+
+        return `-----BEGIN CERTIFICATE-----\n${formatPEM(
+            toBase64(
+                arrayBufferToString(
+                    certificate.toSchema().toBER(false)
+                )
+            )
+        )}\n-----END CERTIFICATE-----`;
     }
 
     var { hexPublicKey, publicKey, privateKey, subjectKeyIdentifier } = generateKeys();
@@ -322,7 +327,7 @@ describe("PKI", function () {
         expect(await rootContract.owner()).to.equal(rootCA.address);
 
         // generate a self signed certificate
-        const rootCaCertificatePEM = issueCertificate(rootCaCertificate, rootCaCertificate, rootCaPrivateKey, rootCaPublicKey, passphrase);
+        const rootCaCertificatePEM = await issueCertificate(rootCaCertificate, rootCaCertificate, rootCaPrivateKey, rootCaPublicKey, passphrase);
 
         // assign CaCertificate in the Root CA smartcontract
         rootCaCertificate[index["extensions"]["caAddress"]] = rootContract.address;
