@@ -112,7 +112,6 @@ contract PKI is owned {
     // ask CA to issue a certificate
     function requestCertificate(string[33] memory cert) public {
         // checks
-
         // subject begins //
         require(bytes(cert[0]).length > 0, "Common name is required");
         require(bytes(cert[1]).length > 0, "Organization is required");
@@ -156,26 +155,34 @@ contract PKI is owned {
 
         certificateStatus[certificates.length + 1] = Status.Pending;
         emit CertificateRequested(certificates.length + 1, cert[0]);
+        cert[5] = caCertificate[0];
+        cert[6] = caCertificate[1];
+        cert[7] = caCertificate[2];
+        cert[8] = caCertificate[3];
+        cert[9] = caCertificate[4];
         cert[19] = "3";
         cert[20] = uintToString(certificates.length + 1);
-        cert[21] = "SHA-256 with RSA Encryption";
-        cert[31] = caCertificate[30];
+        cert[21] = "ecdsa-with-SHA256";
         cert[26] = toString(msg.sender);
         cert[27] = caCertificate[26];
         cert[28] = caCertificate[28];
         cert[29] = "";
+        cert[31] = caCertificate[30];
         cert[32] = "";
         certificates.push(cert);
     }
 
     // rejects the oldest pending certificate
     function rejectPendingCertificate() public onlyOwner {
-        require(certificateStatus[oldestPendingCertificateSerialNumber] == Status.Pending);
-        certificateStatus[oldestPendingCertificateSerialNumber] = Status.Rejected;
+        require(
+            certificateStatus[oldestPendingCertificateSerialNumber] ==
+                Status.Pending
+        );
+        certificateStatus[oldestPendingCertificateSerialNumber] = Status
+            .Rejected;
         oldestPendingCertificateSerialNumber++;
     }
 
-    // TODO: fingerprint, check for existing altnames
     // issues the oldest pending certificate
     function issuePendingCertificate(
         string memory signature,
@@ -207,7 +214,9 @@ contract PKI is owned {
         );
         string[] memory altNames = stringToStringArray(temp5, " ");
         for (uint i = 0; i < altNames.length; i++) {
-            nameToSerialNumber[altNames[i]] = oldestPendingCertificateSerialNumber;
+            nameToSerialNumber[
+                altNames[i]
+            ] = oldestPendingCertificateSerialNumber;
         }
         oldestPendingCertificateSerialNumber++;
     }
