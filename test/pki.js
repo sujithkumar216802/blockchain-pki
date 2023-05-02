@@ -1,8 +1,9 @@
+const fs = require('fs');
 const { expect } = require("chai");
 const { ethers } = require("hardhat");
-const { PublicKeyInfo, CertificationRequest, AttributeTypeAndValue, setEngine, CryptoEngine, Certificate, AlgorithmIdentifier, Extension, BasicConstraints } = require('pkijs');
-const { PrintableString, Utf8String, fromBER, Integer, Null, BitString } = require('asn1js');
-const { generateKeyPairSync, createPublicKey, createPrivateKey, createHash, webcrypto, subtle, sign } = require('crypto');
+const { PublicKeyInfo, CertificationRequest, AttributeTypeAndValue, setEngine, CryptoEngine, Certificate, Extension, BasicConstraints, AuthorityKeyIdentifier } = require('pkijs');
+const { PrintableString, Utf8String, fromBER, Integer, OctetString } = require('asn1js');
+const { generateKeyPairSync, createPublicKey, createPrivateKey, createHash, webcrypto, subtle } = require('crypto');
 const { arrayBufferToString, toBase64 } = require('pvutils');
 
 describe("PKI", function () {
@@ -82,19 +83,10 @@ describe("PKI", function () {
             }
         });
 
-        const publicKeyDer = createPublicKey(publicKey)
-            .export({
-                format: 'der',
-                type: 'spki'
-            });
-
-        const hexPublicKey = publicKeyDer.toString('hex');
-        const sha1 = createHash('sha1').update(publicKeyDer).digest('hex');
-        const subjectKeyIdentifier = sha1;
-        return { hexPublicKey, publicKey, privateKey, subjectKeyIdentifier };
+        return { publicKey, privateKey };
     }
 
-    async function generateCSR(cert, publicKey, privateKey) {
+    async function generateCSR(cert, requesterPublicKey, requesterPrivateKey, password) {
         const csr = new CertificationRequest();
 
         csr.version = 0;
@@ -126,13 +118,13 @@ describe("PKI", function () {
         csr.attributes = [];
 
         // Set the public key in the CSR
-        const berPublicKey = createPublicKey(publicKey).export({ type: 'spki', format: 'der' });
+        const berPublicKey = createPublicKey(requesterPublicKey).export({ type: 'spki', format: 'der' });
         const asn1 = fromBER(berPublicKey);
         const pubKey = new PublicKeyInfo({ schema: asn1.result });
         csr.subjectPublicKeyInfo = pubKey;
 
         // await csr.subjectPublicKeyInfo.importKey(publicKey);
-        const berPrivateKey = createPrivateKey({ key: privateKey, type: 'pkcs8', format: 'pem', passphrase: passphrase }).export({
+        const berPrivateKey = createPrivateKey({ key: requesterPrivateKey, type: 'pkcs8', format: 'pem', passphrase: password }).export({
             format: 'der',
             type: 'pkcs8',
         });
@@ -155,7 +147,7 @@ describe("PKI", function () {
         )}\n-----END CERTIFICATE REQUEST-----`;
     }
 
-    async function issueCertificate(issuer, subject, issuerPrivateKey, subjectPublicKey, password) {
+    async function issueCertificate(issuer, subject, issuerPrivateKey, password) {
 
         const certificate = new Certificate()
         certificate.version = 2;
@@ -213,7 +205,7 @@ describe("PKI", function () {
         }));
 
         // Set the public key
-        const berPublicKey = createPublicKey(subjectPublicKey).export({ type: 'spki', format: 'der' });
+        const berPublicKey = createPublicKey(subject[index['publicKeyInfo']['publicKey']]).export({ type: 'spki', format: 'der' });
         const asn1 = fromBER(berPublicKey);
         const pubKey = new PublicKeyInfo({ schema: asn1.result });
         certificate.subjectPublicKeyInfo = pubKey;
@@ -236,6 +228,23 @@ describe("PKI", function () {
             extnValue: basicConstr.toSchema().toBER(false),
             parsedValue: basicConstr // Parsed value for well-known extensions
         }));
+
+        const subjectKeyIdentifier = createHash('sha1').update(subject[index['publicKeyInfo']['publicKey']]).digest();
+        certificate.extensions.push(new Extension({
+            extnID: "2.5.29.14",
+            extnValue: new OctetString({ valueHex: subjectKeyIdentifier }).toBER(false),
+        }));
+
+        const authorityKeyIdentifier = createHash('sha1').update(issuer[index['publicKeyInfo']['publicKey']]).digest();
+
+        if (authorityKeyIdentifier.toString() !== subjectKeyIdentifier.toString()) {
+            certificate.extensions.push(new Extension({
+                extnID: "2.5.29.35",
+                extnValue: new AuthorityKeyIdentifier({
+                    keyIdentifier: new OctetString({ valueHex: authorityKeyIdentifier }),
+                }).toSchema().toBER(false),
+            }));
+        }
 
         // Sign the certificate with the private key
         const berPrivateKey = createPrivateKey({ key: issuerPrivateKey, type: 'pkcs8', format: 'pem', passphrase: password }).export({
@@ -261,61 +270,73 @@ describe("PKI", function () {
         )}\n-----END CERTIFICATE-----`;
     }
 
-    var { hexPublicKey, publicKey, privateKey, subjectKeyIdentifier } = generateKeys();
+    var { publicKey, privateKey } = generateKeys();
     const rootCaPublicKey = publicKey;
     const rootCaPrivateKey = privateKey;
-    const rootCaCertificate = ["Blockchain Root CA", "Root CA", "TRZ", "TN", "IN", "Blockchain Root CA", "Root CA", "TRZ", "TN", "IN", "1681161711", "1781161711", "", "", "", "", "", "", "", "3", "0", "", "sha1", "sha256", "true", "0", "", "", "Sepolia", "", "SubjectKeyIdentifier", "AuthorityKeyIdentifier", "Signature"];
-    rootCaCertificate[index['publicKeyInfo']['publicKey']] = hexPublicKey;
-    rootCaCertificate[index['publicKeyInfo']['keySize']] = '256';
-    rootCaCertificate[index['publicKeyInfo']['algorithm']] = 'Elliptic Curve';
-    rootCaCertificate[index['subjectKeyIdentifier']] = subjectKeyIdentifier;
-    console.log('rootCaCertificate: ', rootCaCertificate);
-    console.log('Root Private Key: ', createPrivateKey({ key: rootCaPrivateKey, type: 'pkcs8', format: 'pem', passphrase: passphrase }).export({
+    const rootCaCertificate = ["Blockchain Root CA", "Root CA", "TRZ", "TN", "IN", "Blockchain Root CA", "Root CA", "TRZ", "TN", "IN", "1681161711", "1781161711", "", "", "", "", "Elliptic Curve", "256", "", "3", "0", "", "", "", "true", "0", "", "", "Sepolia", "", "", "", ""];
+    rootCaCertificate[index['publicKeyInfo']['publicKey']] = publicKey;
+    fs.writeFileSync('rootCaPrivateKey.pem', rootCaPrivateKey);
+    fs.writeFileSync('rootCaPublicKey.pem', rootCaPublicKey);
+    fs.writeFileSync('UnlockedRootCaPrivateKey.pem', createPrivateKey({ key: rootCaPrivateKey, type: 'pkcs8', format: 'pem', passphrase: passphrase }).export({
         format: 'pem',
         type: 'pkcs8',
     }));
+    // console.log('rootCaCertificate: ', rootCaCertificate);
+    // console.log('Root Private Key: ', createPrivateKey({ key: rootCaPrivateKey, type: 'pkcs8', format: 'pem', passphrase: passphrase }).export({
+    //     format: 'pem',
+    //     type: 'pkcs8',
+    // }));
 
-    var { hexPublicKey, publicKey, privateKey, subjectKeyIdentifier } = generateKeys();
+    var { publicKey, privateKey } = generateKeys();
     const subCaPublicKey = publicKey;
     const subCaPrivateKey = privateKey;
-    const subCaCertificate = ["Blockchain Sub CA", "Sub CA", "TRZ", "TN", "IN", "", "", "", "", "", "1681161711", "1781161711", "", "", "", "", "", "", "", "3", "", "", "sha1", "sha256", "true", "0", "", "", "Sepolia", "", "SubjectKeyIdentifier", "AuthorityKeyIdentifier", "Signature"];
-    subCaCertificate[index['publicKeyInfo']['publicKey']] = hexPublicKey;
-    subCaCertificate[index['publicKeyInfo']['keySize']] = '256';
-    subCaCertificate[index['publicKeyInfo']['algorithm']] = 'Elliptic Curve';
-    subCaCertificate[index['subjectKeyIdentifier']] = subjectKeyIdentifier;
-    console.log('subCaCertificate: ', subCaCertificate);
-    console.log('SubCA Private Key: ', createPrivateKey({ key: subCaPrivateKey, type: 'pkcs8', format: 'pem', passphrase: passphrase }).export({
+    const subCaCertificate = ["Blockchain Sub CA", "Sub CA", "TRZ", "TN", "IN", "", "", "", "", "", "1681161711", "1781161711", "", "", "", "", "Elliptic Curve", "256", "", "3", "", "", "", "", "true", "0", "", "", "Sepolia", "", "", "", ""];
+    subCaCertificate[index['publicKeyInfo']['publicKey']] = publicKey;
+    fs.writeFileSync('subCaPrivateKey.pem', subCaPrivateKey);
+    fs.writeFileSync('subCaPublicKey.pem', subCaPublicKey);
+    fs.writeFileSync('UnlockedSubCaPrivateKey.pem', createPrivateKey({ key: subCaPrivateKey, type: 'pkcs8', format: 'pem', passphrase: passphrase }).export({
         format: 'pem',
         type: 'pkcs8',
     }));
+    // console.log('subCaCertificate: ', subCaCertificate);
+    // console.log('SubCA Private Key: ', createPrivateKey({ key: subCaPrivateKey, type: 'pkcs8', format: 'pem', passphrase: passphrase }).export({
+    //     format: 'pem',
+    //     type: 'pkcs8',
+    // }));
 
-    var { hexPublicKey, publicKey, privateKey, subjectKeyIdentifier } = generateKeys();
+    var { publicKey, privateKey } = generateKeys();
     const userPublicKey = publicKey;
     const userPrivateKey = privateKey;
-    const userCertificate = ["Blockchain User 1", "User", "TRZ", "TN", "IN", "", "", "", "", "", "1681161711", "1781161711", "", "", "", "", "", "", "", "3", "", "", "sha1", "sha256", "false", "0", "", "", "Sepolia", "", "SubjectKeyIdentifier", "AuthorityKeyIdentifier", "Signature"];
-    userCertificate[index['publicKeyInfo']['publicKey']] = hexPublicKey;
-    userCertificate[index['publicKeyInfo']['keySize']] = '256';
-    userCertificate[index['publicKeyInfo']['algorithm']] = 'Elliptic Curve';
-    userCertificate[index['subjectKeyIdentifier']] = subjectKeyIdentifier;
-    console.log('userCaCertificate: ', userCertificate);
-    console.log('User Private Key: ', createPrivateKey({ key: userPrivateKey, type: 'pkcs8', format: 'pem', passphrase: passphrase }).export({
+    const userCertificate = ["Blockchain User 1", "User", "TRZ", "TN", "IN", "", "", "", "", "", "1681161711", "1781161711", "", "", "", "", "Elliptic Curve", "256", "", "3", "", "", "", "", "false", "0", "", "", "Sepolia", "", "", "", ""];
+    userCertificate[index['publicKeyInfo']['publicKey']] = publicKey;
+    fs.writeFileSync('userPrivateKey.pem', userPrivateKey);
+    fs.writeFileSync('userPublicKey.pem', userPublicKey);
+    fs.writeFileSync('UnlockedUserPrivateKey.pem', createPrivateKey({ key: userPrivateKey, type: 'pkcs8', format: 'pem', passphrase: passphrase }).export({
         format: 'pem',
         type: 'pkcs8',
     }));
+    // console.log('userCaCertificate: ', userCertificate);
+    // console.log('User Private Key: ', createPrivateKey({ key: userPrivateKey, type: 'pkcs8', format: 'pem', passphrase: passphrase }).export({
+    //     format: 'pem',
+    //     type: 'pkcs8',
+    // }));
 
-    var { hexPublicKey, publicKey, privateKey, subjectKeyIdentifier } = generateKeys();
+    var { publicKey, privateKey } = generateKeys();
     const rejectUserPublicKey = publicKey;
     const rejectUserPrivateKey = privateKey;
-    const rejectUserCertificate = ["Blockchain User 2", "User", "TRZ", "TN", "IN", "", "", "", "", "", "1681161711", "1781161711", "", "", "", "", "", "", "", "3", "", "", "sha1", "sha256", "false", "0", "", "", "Sepolia", "", "SubjectKeyIdentifier", "AuthorityKeyIdentifier", "Signature"];
-    rejectUserCertificate[index['publicKeyInfo']['publicKey']] = hexPublicKey;
-    rejectUserCertificate[index['publicKeyInfo']['keySize']] = '256';
-    rejectUserCertificate[index['publicKeyInfo']['algorithm']] = 'Elliptic Curve';
-    rejectUserCertificate[index['subjectKeyIdentifier']] = subjectKeyIdentifier;
-    console.log('rejectUserCaCertificate: ', rejectUserCertificate);
-    console.log('RejectUser Private Key: ', createPrivateKey({ key: rejectUserPrivateKey, type: 'pkcs8', format: 'pem', passphrase: passphrase }).export({
+    const rejectUserCertificate = ["Blockchain User 2", "User", "TRZ", "TN", "IN", "", "", "", "", "", "1681161711", "1781161711", "", "", "", "", "Elliptic Curve", "256", "", "3", "", "", "", "", "false", "0", "", "", "Sepolia", "", "", "", ""];
+    rejectUserCertificate[index['publicKeyInfo']['publicKey']] = publicKey;
+    fs.writeFileSync('rejectUserPrivateKey.pem', rejectUserPrivateKey);
+    fs.writeFileSync('rejectUserPublicKey.pem', rejectUserPublicKey);
+    fs.writeFileSync('UnlockedRejectUserPrivateKey.pem', createPrivateKey({ key: rejectUserPrivateKey, type: 'pkcs8', format: 'pem', passphrase: passphrase }).export({
         format: 'pem',
         type: 'pkcs8',
     }));
+    // console.log('rejectUserCaCertificate: ', rejectUserCertificate);
+    // console.log('RejectUser Private Key: ', createPrivateKey({ key: rejectUserPrivateKey, type: 'pkcs8', format: 'pem', passphrase: passphrase }).export({
+    //     format: 'pem',
+    //     type: 'pkcs8',
+    // }));
 
     // A single test is being used to preserve state instead of having different tests which resets the state of the contract
     it("Everything", async function () {
@@ -326,13 +347,17 @@ describe("PKI", function () {
         await rootContract.deployed();
         expect(await rootContract.owner()).to.equal(rootCA.address);
 
-        // generate a self signed certificate
-        const rootCaCertificatePEM = await issueCertificate(rootCaCertificate, rootCaCertificate, rootCaPrivateKey, rootCaPublicKey, passphrase);
 
-        // assign CaCertificate in the Root CA smartcontract
+        // fill root ca certificate values
         rootCaCertificate[index["extensions"]["caAddress"]] = rootContract.address;
         rootCaCertificate[index["extensions"]["issuerAddress"]] = rootCA.address;
         rootCaCertificate[index["extensions"]["subjectAddress"]] = rootCA.address;
+
+        // generate a self signed certificate
+        const rootCaCertificateCrt = await issueCertificate(rootCaCertificate, rootCaCertificate, rootCaPrivateKey, passphrase);
+        fs.writeFileSync('rootCaCertificate.crt', rootCaCertificateCrt);
+
+        // assign CaCertificate in the Root CA smartcontract
         await rootContract.populateCaCertificate(rootCaCertificate);
         expect(rootCaCertificate).to.deep.equal(await rootContract.getCaCertificate());
 
@@ -345,11 +370,17 @@ describe("PKI", function () {
         expect(await rootContract.getCertificateStatus(subCaSerialNumber)).to.equal(0);
 
         // sub ca generating a csr
-        const subCSR = await generateCSR(subCaCertificate, subCaPublicKey, subCaPrivateKey);
+        const subCSR = await generateCSR(subCaCertificate, subCaPublicKey, subCaPrivateKey, passphrase);
+        fs.writeFileSync('subCaCSR.csr', subCSR);
 
         // Deploy Sub CA
         const subCaContract = await PKI.connect(rootCA).deploy();
         expect(await subCaContract.owner()).to.equal(rootCA.address);
+
+        // root issuing a certificate
+        const subCaCertificateFromContract = await rootContract.getPendingCertificate();
+        const subCaCertificateCrt = await issueCertificate(rootCaCertificate, subCaCertificateFromContract, rootCaPrivateKey, passphrase);
+        fs.writeFileSync('subCaCertificate.crt', subCaCertificateCrt);
 
         // Should Issue CA Certificate
         await rootContract.issuePendingCertificate("toBeFilled", subCaContract.address);
@@ -371,6 +402,16 @@ describe("PKI", function () {
         const userSerialNumber = userCertificateRequestedEvent.args.serialNumber;
         expect(userSerialNumber).to.equal(1);
         expect(await subCaContract.getCertificateStatus(userSerialNumber)).to.equal(0);
+
+        // user generating a csr
+        const userCSR = await generateCSR(userCertificate, userPublicKey, userPrivateKey, passphrase);
+        fs.writeFileSync('userCSR.csr', userCSR);
+
+        // sub CA issuing a certificate
+        const userCertificateFromContract = await subCaContract.connect(subCA).getPendingCertificate();
+        const userCertificateCrt = await issueCertificate(issuedSubCaCertificateFromContract, userCertificateFromContract, subCaPrivateKey, passphrase);
+        fs.writeFileSync('userCertificate.crt', userCertificateCrt);
+
         await subCaContract.connect(subCA).issuePendingCertificate("toBeFilled", "");
         expect(await subCaContract.getCertificateStatus(userSerialNumber)).to.equal(1);
 
@@ -378,12 +419,7 @@ describe("PKI", function () {
         await subCaContract.connect(subCA).revokeCertificate(userSerialNumber);
         expect(await subCaContract.getCertificateStatus(userSerialNumber)).to.equal(2);
 
-        // Other function
-        // getCertificate Name
-        expect(issuedSubCaCertificateFromContract).to.deep.equal(await rootContract["getCertificate(string)"]("Blockchain Sub CA"));
-
         // rejectPendingCertificate
-        // Should request and issue user Certificate
         const rejectUserRequestTx = await subCaContract.connect(rejectUser).requestCertificate(rejectUserCertificate);
         const rejectUserReceipt = await rejectUserRequestTx.wait();
         const rejectUserCertificateRequestedEvent = rejectUserReceipt.events.find(event => event.event === "CertificateRequested");
@@ -391,5 +427,9 @@ describe("PKI", function () {
         expect(rejectUserSerialNumber).to.equal(2);
         await subCaContract.connect(subCA).rejectPendingCertificate();
         expect(await subCaContract.getCertificateStatus(rejectUserSerialNumber)).to.equal(3);
+
+        // Other function
+        // getCertificate Name
+        expect(issuedSubCaCertificateFromContract).to.deep.equal(await rootContract["getCertificate(string)"]("Blockchain Sub CA"));
     });
 });

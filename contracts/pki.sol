@@ -147,10 +147,6 @@ contract PKI is owned {
         // key usage ends //
 
         // others begins //
-        require(
-            bytes(cert[30]).length > 0,
-            "Subject key identifier is required"
-        );
         // others ends //
 
         certificateStatus[certificates.length + 1] = Status.Pending;

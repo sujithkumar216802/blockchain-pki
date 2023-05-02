@@ -111,3 +111,9 @@ typechain-types
 # Hardhat files
 cache
 artifacts
+
+# temporary certrificate and key files
+*.pem
+*.key
+*.crt
+*.csr
