@@ -65,7 +65,7 @@ describe("PKI", function () {
     }
 
     function formatPEM(pemString) {
-        return pemString.replace(/(.{64})/g, '$1\n')
+        return pemString.match(/.{1,64}/g).join('\n');
     }
 
     function generateKeys() {
