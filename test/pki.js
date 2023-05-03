@@ -2,7 +2,7 @@ const fs = require('fs');
 const { expect } = require("chai");
 const { ethers } = require("hardhat");
 const { PublicKeyInfo, CertificationRequest, AttributeTypeAndValue, setEngine, CryptoEngine, Certificate, Extension, BasicConstraints, AuthorityKeyIdentifier } = require('pkijs');
-const { PrintableString, Utf8String, fromBER, Integer, OctetString } = require('asn1js');
+const { PrintableString, fromBER, Integer, OctetString } = require('asn1js');
 const { generateKeyPairSync, createPublicKey, createPrivateKey, createHash, webcrypto, subtle } = require('crypto');
 const { arrayBufferToString, toBase64 } = require('pvutils');
 
@@ -54,10 +54,10 @@ describe("PKI", function () {
             "pathLenConstraint": 25,
         },
         "extensions": {
-            "subjectAddress": 26,
-            "issuerAddress": 27,
+            "subjectWalletAddress": 26,
+            "issuerContractAddress": 27,
             "blockchainName": 28,
-            "caAddress": 29,
+            "contractAddress": 29,
         },
         "subjectKeyIdentifier": 30,
         "authorityKeyIdentifier": 31,
@@ -66,6 +66,28 @@ describe("PKI", function () {
 
     function formatPEM(pemString) {
         return pemString.match(/.{1,64}/g).join('\n');
+    }
+
+    function hexStringToArrayBuffer(hexString) {
+        // remove the leading 0x
+        hexString = hexString.replace(/^0x/, '');
+
+        // Remove any spaces or non-hex characters from the string
+        hexString = hexString.replace(/[^0-9a-fA-F]/g, '');
+
+        // If the length of the string is odd, add a leading zero
+        if (hexString.length % 2 !== 0) {
+            hexString = '0' + hexString;
+        }
+
+        // Convert the hex string to an array of bytes
+        const bytes = new Uint8Array(hexString.length / 2);
+        for (let i = 0; i < hexString.length; i += 2) {
+            bytes[i / 2] = parseInt(hexString.substr(i, 2), 16);
+        }
+
+        // Return the bytes as an ArrayBuffer
+        return bytes;
     }
 
     function generateKeys() {
@@ -97,22 +119,22 @@ describe("PKI", function () {
 
         csr.subject.typesAndValues.push(new AttributeTypeAndValue({
             type: '2.5.4.7', //localityName
-            value: new Utf8String({ value: cert[index['subject']['locality']] })
+            value: new PrintableString({ value: cert[index['subject']['locality']] })
         }));
 
         csr.subject.typesAndValues.push(new AttributeTypeAndValue({
             type: '2.5.4.8', //stateOrProvinceName
-            value: new Utf8String({ value: cert[index['subject']['state']] })
+            value: new PrintableString({ value: cert[index['subject']['state']] })
         }));
 
         csr.subject.typesAndValues.push(new AttributeTypeAndValue({
             type: '2.5.4.10', //organizationName
-            value: new Utf8String({ value: cert[index['subject']['organization']] })
+            value: new PrintableString({ value: cert[index['subject']['organization']] })
         }));
 
         csr.subject.typesAndValues.push(new AttributeTypeAndValue({
             type: '2.5.4.3', //commonName
-            value: new Utf8String({ value: cert[index['subject']['commonName']] })
+            value: new PrintableString({ value: cert[index['subject']['commonName']] })
         }));
 
         csr.attributes = [];
@@ -155,7 +177,7 @@ describe("PKI", function () {
 
         certificate.subject.typesAndValues.push(new AttributeTypeAndValue({
             type: '2.5.4.3', //commonName
-            value: new Utf8String({ value: subject[index['subject']['commonName']] })
+            value: new PrintableString({ value: subject[index['subject']['commonName']] })
         }));
 
         certificate.subject.typesAndValues.push(new AttributeTypeAndValue({
@@ -165,23 +187,23 @@ describe("PKI", function () {
 
         certificate.subject.typesAndValues.push(new AttributeTypeAndValue({
             type: '2.5.4.7', //localityName
-            value: new Utf8String({ value: subject[index['subject']['locality']] })
+            value: new PrintableString({ value: subject[index['subject']['locality']] })
         }));
 
         certificate.subject.typesAndValues.push(new AttributeTypeAndValue({
             type: '2.5.4.8', //stateOrProvinceName
-            value: new Utf8String({ value: subject[index['subject']['state']] })
+            value: new PrintableString({ value: subject[index['subject']['state']] })
         }));
 
         certificate.subject.typesAndValues.push(new AttributeTypeAndValue({
             type: '2.5.4.10', //organizationName
-            value: new Utf8String({ value: subject[index['subject']['organization']] })
+            value: new PrintableString({ value: subject[index['subject']['organization']] })
         }));
 
 
         certificate.issuer.typesAndValues.push(new AttributeTypeAndValue({
             type: '2.5.4.3', //commonName
-            value: new Utf8String({ value: issuer[index['subject']['commonName']] })
+            value: new PrintableString({ value: issuer[index['subject']['commonName']] })
         }));
 
         certificate.issuer.typesAndValues.push(new AttributeTypeAndValue({
@@ -191,17 +213,17 @@ describe("PKI", function () {
 
         certificate.issuer.typesAndValues.push(new AttributeTypeAndValue({
             type: '2.5.4.7', //localityName
-            value: new Utf8String({ value: issuer[index['subject']['locality']] })
+            value: new PrintableString({ value: issuer[index['subject']['locality']] })
         }));
 
         certificate.issuer.typesAndValues.push(new AttributeTypeAndValue({
             type: '2.5.4.8', //stateOrProvinceName
-            value: new Utf8String({ value: issuer[index['subject']['state']] })
+            value: new PrintableString({ value: issuer[index['subject']['state']] })
         }));
 
         certificate.issuer.typesAndValues.push(new AttributeTypeAndValue({
             type: '2.5.4.10', //organizationName
-            value: new Utf8String({ value: issuer[index['subject']['organization']] })
+            value: new PrintableString({ value: issuer[index['subject']['organization']] })
         }));
 
         // Set the public key
@@ -246,6 +268,27 @@ describe("PKI", function () {
             }));
         }
 
+        certificate.extensions.push(new Extension({
+            extnID: "2.5.29.5000", // X509v3 Subject Wallet Address, the OID is not registered
+            extnValue: new OctetString({ valueHex: hexStringToArrayBuffer(subject[index['extensions']['subjectWalletAddress']]) }).toBER(false),
+        }));
+
+        certificate.extensions.push(new Extension({
+            extnID: "2.5.29.5001", // X509v3 Issuer Contract identifier, the OID is not registered
+            extnValue: new OctetString({ valueHex: hexStringToArrayBuffer(issuer[index['extensions']['contractAddress']]) }).toBER(false),
+        }));
+
+        certificate.extensions.push(new Extension({
+            extnID: "2.5.29.5002", // X509v3 Blockchain name, the OID is not registered
+            extnValue: new PrintableString({ value: issuer[index['extensions']['blockchainName']] }).toBER(false),
+        }));
+
+        if (subject[index['basicConstraints']['isCA']] === 'true' && authorityKeyIdentifier.toString() !== subjectKeyIdentifier.toString()) {
+            certificate.extensions.push(new Extension({
+                extnID: "2.5.29.5003", // X509v3 Contract identifier, the OID is not registered
+                extnValue: new OctetString({ valueHex: hexStringToArrayBuffer(subject[index['extensions']['contractAddress']]) }).toBER(false),
+            }));
+        }
         // Sign the certificate with the private key
         const berPrivateKey = createPrivateKey({ key: issuerPrivateKey, type: 'pkcs8', format: 'pem', passphrase: password }).export({
             format: 'der',
@@ -349,9 +392,8 @@ describe("PKI", function () {
 
 
         // fill root ca certificate values
-        rootCaCertificate[index["extensions"]["caAddress"]] = rootContract.address;
-        rootCaCertificate[index["extensions"]["issuerAddress"]] = rootCA.address;
-        rootCaCertificate[index["extensions"]["subjectAddress"]] = rootCA.address;
+        rootCaCertificate[index["extensions"]["contractAddress"]] = rootContract.address;
+        rootCaCertificate[index["extensions"]["subjectWalletAddress"]] = rootCA.address;
 
         // generate a self signed certificate
         const rootCaCertificateCrt = await issueCertificate(rootCaCertificate, rootCaCertificate, rootCaPrivateKey, passphrase);
@@ -378,7 +420,8 @@ describe("PKI", function () {
         expect(await subCaContract.owner()).to.equal(rootCA.address);
 
         // root issuing a certificate
-        const subCaCertificateFromContract = await rootContract.getPendingCertificate();
+        const subCaCertificateFromContract = Object.assign([], await rootContract.getPendingCertificate()); // the returned array is not extensible
+        subCaCertificateFromContract[index['extensions']['contractAddress']] = subCaContract.address;
         const subCaCertificateCrt = await issueCertificate(rootCaCertificate, subCaCertificateFromContract, rootCaPrivateKey, passphrase);
         fs.writeFileSync('subCaCertificate.crt', subCaCertificateCrt);
 
