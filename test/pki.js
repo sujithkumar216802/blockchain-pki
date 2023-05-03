@@ -304,13 +304,17 @@ describe("PKI", function () {
 
         await certificate.sign(cryptoPrivateKey, 'SHA-256');
 
-        return `-----BEGIN CERTIFICATE-----\n${formatPEM(
+        const pem = `-----BEGIN CERTIFICATE-----\n${formatPEM(
             toBase64(
                 arrayBufferToString(
                     certificate.toSchema().toBER(false)
                 )
             )
         )}\n-----END CERTIFICATE-----`;
+        const signature = certificate.signatureValue.toString(16);
+        const subjectKey = Buffer.from(subjectKeyIdentifier).toString('hex');
+
+        return { pem, signature, subjectKey };
     }
 
     var { publicKey, privateKey } = generateKeys();
@@ -396,8 +400,12 @@ describe("PKI", function () {
         rootCaCertificate[index["extensions"]["subjectWalletAddress"]] = rootCA.address;
 
         // generate a self signed certificate
-        const rootCaCertificateCrt = await issueCertificate(rootCaCertificate, rootCaCertificate, rootCaPrivateKey, passphrase);
+        var { pem, signature, subjectKey } = await issueCertificate(rootCaCertificate, rootCaCertificate, rootCaPrivateKey, passphrase);
+        const rootCaCertificateCrt = pem;
         fs.writeFileSync('rootCaCertificate.crt', rootCaCertificateCrt);
+
+        rootCaCertificate[index['subjectKeyIdentifier']] = subjectKey;
+        rootCaCertificate[index['signature']] = signature;
 
         // assign CaCertificate in the Root CA smartcontract
         await rootContract.populateCaCertificate(rootCaCertificate);
@@ -422,11 +430,12 @@ describe("PKI", function () {
         // root issuing a certificate
         const subCaCertificateFromContract = Object.assign([], await rootContract.getPendingCertificate()); // the returned array is not extensible
         subCaCertificateFromContract[index['extensions']['contractAddress']] = subCaContract.address;
-        const subCaCertificateCrt = await issueCertificate(rootCaCertificate, subCaCertificateFromContract, rootCaPrivateKey, passphrase);
+        var { pem, signature, subjectKey } = await issueCertificate(rootCaCertificate, subCaCertificateFromContract, rootCaPrivateKey, passphrase);
+        const subCaCertificateCrt = pem;
         fs.writeFileSync('subCaCertificate.crt', subCaCertificateCrt);
 
         // Should Issue CA Certificate
-        await rootContract.issuePendingCertificate("toBeFilled", subCaContract.address);
+        await rootContract.issuePendingCertificate(signature, subCaContract.address, subjectKey);
         expect(await rootContract.getCertificateStatus(subCaSerialNumber)).to.equal(1);
 
         // assign CaCertificate in the Sub CA smartcontract
@@ -452,10 +461,11 @@ describe("PKI", function () {
 
         // sub CA issuing a certificate
         const userCertificateFromContract = await subCaContract.connect(subCA).getPendingCertificate();
-        const userCertificateCrt = await issueCertificate(issuedSubCaCertificateFromContract, userCertificateFromContract, subCaPrivateKey, passphrase);
+        var { pem, signature, subjectKey } = await issueCertificate(issuedSubCaCertificateFromContract, userCertificateFromContract, subCaPrivateKey, passphrase);
+        const userCertificateCrt = pem;
         fs.writeFileSync('userCertificate.crt', userCertificateCrt);
 
-        await subCaContract.connect(subCA).issuePendingCertificate("toBeFilled", "");
+        await subCaContract.connect(subCA).issuePendingCertificate(signature, "", subjectKey);
         expect(await subCaContract.getCertificateStatus(userSerialNumber)).to.equal(1);
 
         // Revoke user

@@ -59,10 +59,10 @@ contract PKI is owned {
     // }
 
     // struct Extensions {
-    //     address subjectAddress; 26
-    //     address issuerAddress; 27
+    //     address subjectWalletAddress; 26 // wallet address of user
+    //     address issuerContractAddress; 27 // holds the smart contract address of the issuer ca
     //     string blockchainName; 28
-    //     address caAddress; 29 // if the certificate is of a CA, it holds smart contract address of the CA
+    //     address contractAddress; 29 // if the certificate is of a CA, it holds smart contract address of the CA
     // }
 
     // struct Certificate {
@@ -160,7 +160,7 @@ contract PKI is owned {
         cert[20] = uintToString(certificates.length + 1);
         cert[21] = "ecdsa-with-SHA256";
         cert[26] = toString(msg.sender);
-        cert[27] = caCertificate[26];
+        cert[27] = caCertificate[29];
         cert[28] = caCertificate[28];
         cert[29] = "";
         cert[31] = caCertificate[30];
@@ -182,10 +182,12 @@ contract PKI is owned {
     // issues the oldest pending certificate
     function issuePendingCertificate(
         string memory signature,
-        string memory caAddress
+        string memory contractAddress,
+        string memory subjectKeyIdentifier
     ) public onlyOwner {
+        certificates[oldestPendingCertificateSerialNumber - 1][29] = contractAddress;
+        certificates[oldestPendingCertificateSerialNumber - 1][30] = subjectKeyIdentifier;
         certificates[oldestPendingCertificateSerialNumber - 1][32] = signature;
-        certificates[oldestPendingCertificateSerialNumber - 1][29] = caAddress;
         certificateStatus[oldestPendingCertificateSerialNumber] = Status.Issued;
         nameToSerialNumber[
             certificates[oldestPendingCertificateSerialNumber - 1][0]
