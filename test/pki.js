@@ -408,7 +408,7 @@ describe("PKI", function () {
         rootCaCertificate[index['signature']] = signature;
 
         // assign CaCertificate in the Root CA smartcontract
-        await rootContract.populateCaCertificate(rootCaCertificate);
+        await rootContract.populateCaCertificate(rootCaCertificate, pem);
         expect(rootCaCertificate).to.deep.equal(await rootContract.getCaCertificate());
 
         // Should request CA Certificate
@@ -435,12 +435,12 @@ describe("PKI", function () {
         fs.writeFileSync('subCaCertificate.crt', subCaCertificateCrt);
 
         // Should Issue CA Certificate
-        await rootContract.issuePendingCertificate(signature, subCaContract.address, subjectKey);
+        await rootContract.issuePendingCertificate(signature, subCaContract.address, subjectKey, pem);
         expect(await rootContract.getCertificateStatus(subCaSerialNumber)).to.equal(1);
 
         // assign CaCertificate in the Sub CA smartcontract
         const issuedSubCaCertificateFromContract = await rootContract["getCertificate(uint256)"](1);
-        await subCaContract.populateCaCertificate(issuedSubCaCertificateFromContract);
+        await subCaContract.populateCaCertificate(issuedSubCaCertificateFromContract, pem);
         expect(issuedSubCaCertificateFromContract).to.deep.equal(await subCaContract.getCaCertificate());
 
         // Transfer owner
@@ -465,7 +465,7 @@ describe("PKI", function () {
         const userCertificateCrt = pem;
         fs.writeFileSync('userCertificate.crt', userCertificateCrt);
 
-        await subCaContract.connect(subCA).issuePendingCertificate(signature, "", subjectKey);
+        await subCaContract.connect(subCA).issuePendingCertificate(signature, "", subjectKey, pem);
         expect(await subCaContract.getCertificateStatus(userSerialNumber)).to.equal(1);
 
         // Revoke user

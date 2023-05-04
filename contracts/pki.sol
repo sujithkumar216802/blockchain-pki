@@ -95,12 +95,15 @@ contract PKI is owned {
 
     uint public oldestPendingCertificateSerialNumber = 1;
     string[33] caCertificate;
+    string public caCertificateFile;
     string[33][] certificates; // columns then rows for initialization only
+    string[] certificateFiles;
     mapping(string => uint) nameToSerialNumber; // common and alt name to serial number
     mapping(uint => Status) certificateStatus;
 
-    function populateCaCertificate(string[33] memory cert) public onlyOwner {
+    function populateCaCertificate(string[33] memory cert, string memory certFile) public onlyOwner {
         caCertificate = cert;
+        caCertificateFile = certFile;
     }
 
     function getCaCertificate() public view returns (string[33] memory) {
@@ -183,11 +186,13 @@ contract PKI is owned {
     function issuePendingCertificate(
         string memory signature,
         string memory contractAddress,
-        string memory subjectKeyIdentifier
+        string memory subjectKeyIdentifier,
+        string memory certificateFile
     ) public onlyOwner {
         certificates[oldestPendingCertificateSerialNumber - 1][29] = contractAddress;
         certificates[oldestPendingCertificateSerialNumber - 1][30] = subjectKeyIdentifier;
         certificates[oldestPendingCertificateSerialNumber - 1][32] = signature;
+        certificateFiles.push(certificateFile);
         certificateStatus[oldestPendingCertificateSerialNumber] = Status.Issued;
         nameToSerialNumber[
             certificates[oldestPendingCertificateSerialNumber - 1][0]
@@ -217,6 +222,20 @@ contract PKI is owned {
             ] = oldestPendingCertificateSerialNumber;
         }
         oldestPendingCertificateSerialNumber++;
+    }
+
+    function getCertificateFile(
+        uint serialNumber
+    ) public view returns (string memory) {
+        require(serialNumber <= certificates.length);
+        return certificateFiles[serialNumber - 1];
+    }
+
+    function getCertificateFile(
+        string memory name
+    ) public view returns (string memory) {
+        require(nameToSerialNumber[name] > 0, "No certificate for this name");
+        return certificateFiles[nameToSerialNumber[name] - 1];
     }
 
     function getCertificate(
