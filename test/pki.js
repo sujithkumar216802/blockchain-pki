@@ -297,7 +297,7 @@ describe("PKI", function () {
         setEngine('OpenSSL', webcrypto, new CryptoEngine({
             name: 'OpenSSL',
             crypto: webcrypto,
-            subtle: webcrypto.subtle
+            subtle: subtle
         }));
 
         const cryptoPrivateKey = await subtle.importKey('pkcs8', berPrivateKey, { name: 'ECDSA', namedCurve: 'P-256' }, true, ['sign']);
@@ -484,5 +484,7 @@ describe("PKI", function () {
         // Other function
         // getCertificate Name
         expect(issuedSubCaCertificateFromContract).to.deep.equal(await rootContract["getCertificate(string)"]("Blockchain Sub CA"));
+        expect(subCaCertificateCrt).to.equal(await rootContract["getCertificateFile(uint256)"](1));
+        expect(subCaCertificateCrt).to.equal(await rootContract["getCertificateFile(string)"]("Blockchain Sub CA"));
     });
 });

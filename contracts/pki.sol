@@ -227,7 +227,7 @@ contract PKI is owned {
     function getCertificateFile(
         uint serialNumber
     ) public view returns (string memory) {
-        require(serialNumber <= certificates.length);
+        require(serialNumber <= certificateFiles.length, "certificate not issued");
         return certificateFiles[serialNumber - 1];
     }
 
@@ -235,13 +235,14 @@ contract PKI is owned {
         string memory name
     ) public view returns (string memory) {
         require(nameToSerialNumber[name] > 0, "No certificate for this name");
+        require(nameToSerialNumber[name] <= certificateFiles.length, "certificate not issued");
         return certificateFiles[nameToSerialNumber[name] - 1];
     }
 
     function getCertificate(
         uint serialNumber
     ) public view returns (string[33] memory) {
-        require(serialNumber <= certificates.length);
+        require(serialNumber <= certificates.length, "No certificate for this serial no.");
         return certificates[serialNumber - 1];
     }
 
