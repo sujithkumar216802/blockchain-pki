@@ -173,12 +173,8 @@ contract PKI is owned {
 
     // rejects the oldest pending certificate
     function rejectPendingCertificate() public onlyOwner {
-        require(
-            certificateStatus[oldestPendingCertificateSerialNumber] ==
-                Status.Pending
-        );
-        certificateStatus[oldestPendingCertificateSerialNumber] = Status
-            .Rejected;
+        require(isPendingCertificate(), "No pending certificates");
+        certificateStatus[oldestPendingCertificateSerialNumber] = Status.Rejected;
         oldestPendingCertificateSerialNumber++;
     }
 
@@ -189,32 +185,19 @@ contract PKI is owned {
         string memory subjectKeyIdentifier,
         string memory certificateFile
     ) public onlyOwner {
+        require(isPendingCertificate(), "No pending certificates");
         certificates[oldestPendingCertificateSerialNumber - 1][29] = contractAddress;
         certificates[oldestPendingCertificateSerialNumber - 1][30] = subjectKeyIdentifier;
         certificates[oldestPendingCertificateSerialNumber - 1][32] = signature;
         certificateFiles.push(certificateFile);
         certificateStatus[oldestPendingCertificateSerialNumber] = Status.Issued;
-        nameToSerialNumber[
-            certificates[oldestPendingCertificateSerialNumber - 1][0]
-        ] = oldestPendingCertificateSerialNumber; // commonName
-        string memory temp = string.concat(
-            certificates[oldestPendingCertificateSerialNumber - 1][12],
-            " "
-        );
-        string memory temp1 = string.concat(
-            temp,
-            certificates[oldestPendingCertificateSerialNumber - 1][13]
-        );
+        nameToSerialNumber[certificates[oldestPendingCertificateSerialNumber - 1][0]] = oldestPendingCertificateSerialNumber; // commonName
+        string memory temp = string.concat(certificates[oldestPendingCertificateSerialNumber - 1][12], " ");
+        string memory temp1 = string.concat(temp, certificates[oldestPendingCertificateSerialNumber - 1][13]);
         string memory temp2 = string.concat(temp1, " ");
-        string memory temp3 = string.concat(
-            temp2,
-            certificates[oldestPendingCertificateSerialNumber - 1][14]
-        );
+        string memory temp3 = string.concat(temp2, certificates[oldestPendingCertificateSerialNumber - 1][14]);
         string memory temp4 = string.concat(temp3, " ");
-        string memory temp5 = string.concat(
-            temp4,
-            certificates[oldestPendingCertificateSerialNumber - 1][15]
-        );
+        string memory temp5 = string.concat(temp4, certificates[oldestPendingCertificateSerialNumber - 1][15]);
         string[] memory altNames = stringToStringArray(temp5, " ");
         for (uint i = 0; i < altNames.length; i++) {
             nameToSerialNumber[
@@ -222,6 +205,16 @@ contract PKI is owned {
             ] = oldestPendingCertificateSerialNumber;
         }
         oldestPendingCertificateSerialNumber++;
+    }
+
+    function checkExpiry(uint serialNumber) public returns (bool) {
+        require(serialNumber <= certificates.length);
+        uint notAfter = stringToUint(certificates[serialNumber - 1][11]);
+        if(notAfter < block.timestamp) {
+            certificateStatus[serialNumber] = Status.Expired;
+            return true;
+        }
+        return false;
     }
 
     function getCertificateFile(
