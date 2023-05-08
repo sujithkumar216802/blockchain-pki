@@ -277,6 +277,13 @@ contract PKI is owned {
         return uint(certificateStatus[serialNumber]);
     }
 
+    function getCertificateStatus(
+        string memory name
+    ) public view returns (uint) {
+        require(nameToSerialNumber[name] > 0, "No certificate for this name");
+        return uint(certificateStatus[nameToSerialNumber[name] - 1]);
+    }
+
     // Helper functions begin
 
     function stringToStringArray(

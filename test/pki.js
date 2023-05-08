@@ -386,7 +386,7 @@ describe("PKI", function () {
     // }));
 
     // A single test is being used to preserve state instead of having different tests which resets the state of the contract
-    it("Everything", async function () {
+    it("PKI Contract", async function () {
         // Deploy Root CA
         const PKI = await ethers.getContractFactory("PKI");
         const [rootCA, subCA, user, rejectUser] = await ethers.getSigners();
@@ -417,7 +417,7 @@ describe("PKI", function () {
         const SubCaCertificateRequestedEvent = subCaReceipt.events.find(event => event.event === "CertificateRequested");
         const subCaSerialNumber = SubCaCertificateRequestedEvent.args.serialNumber;
         expect(subCaSerialNumber).to.equal(1);
-        expect(await rootContract.getCertificateStatus(subCaSerialNumber)).to.equal(0);
+        expect(await rootContract["getCertificateStatus(uint256)"](subCaSerialNumber)).to.equal(0);
 
         // sub ca generating a csr
         const subCSR = await generateCSR(subCaCertificate, subCaPublicKey, subCaPrivateKey, passphrase);
@@ -436,7 +436,7 @@ describe("PKI", function () {
 
         // Should Issue CA Certificate
         await rootContract.issuePendingCertificate(signature, subCaContract.address, subjectKey, pem);
-        expect(await rootContract.getCertificateStatus(subCaSerialNumber)).to.equal(1);
+        expect(await rootContract["getCertificateStatus(uint256)"](subCaSerialNumber)).to.equal(1);
 
         // assign CaCertificate in the Sub CA smartcontract
         const issuedSubCaCertificateFromContract = await rootContract["getCertificate(uint256)"](1);
@@ -453,7 +453,7 @@ describe("PKI", function () {
         const userCertificateRequestedEvent = userReceipt.events.find(event => event.event === "CertificateRequested");
         const userSerialNumber = userCertificateRequestedEvent.args.serialNumber;
         expect(userSerialNumber).to.equal(1);
-        expect(await subCaContract.getCertificateStatus(userSerialNumber)).to.equal(0);
+        expect(await subCaContract["getCertificateStatus(uint256)"](userSerialNumber)).to.equal(0);
 
         // user generating a csr
         const userCSR = await generateCSR(userCertificate, userPublicKey, userPrivateKey, passphrase);
@@ -466,11 +466,11 @@ describe("PKI", function () {
         fs.writeFileSync('userCertificate.crt', userCertificateCrt);
 
         await subCaContract.connect(subCA).issuePendingCertificate(signature, "", subjectKey, pem);
-        expect(await subCaContract.getCertificateStatus(userSerialNumber)).to.equal(1);
+        expect(await subCaContract["getCertificateStatus(uint256)"](userSerialNumber)).to.equal(1);
 
         // Revoke user
         await subCaContract.connect(subCA).revokeCertificate(userSerialNumber);
-        expect(await subCaContract.getCertificateStatus(userSerialNumber)).to.equal(2);
+        expect(await subCaContract["getCertificateStatus(uint256)"](userSerialNumber)).to.equal(2);
 
         // rejectPendingCertificate
         const rejectUserRequestTx = await subCaContract.connect(rejectUser).requestCertificate(rejectUserCertificate);
@@ -479,11 +479,12 @@ describe("PKI", function () {
         const rejectUserSerialNumber = rejectUserCertificateRequestedEvent.args.serialNumber;
         expect(rejectUserSerialNumber).to.equal(2);
         await subCaContract.connect(subCA).rejectPendingCertificate();
-        expect(await subCaContract.getCertificateStatus(rejectUserSerialNumber)).to.equal(3);
+        expect(await subCaContract["getCertificateStatus(uint256)"](rejectUserSerialNumber)).to.equal(3);
 
         // Other function
         // getCertificate Name
         expect(issuedSubCaCertificateFromContract).to.deep.equal(await rootContract["getCertificate(string)"]("Blockchain Sub CA"));
+        expect(await rootContract["getCertificateStatus(string)"](subCaCertificate[index['subject']['commonName']])).to.equal(0); 
         expect(subCaCertificateCrt).to.equal(await rootContract["getCertificateFile(uint256)"](1));
         expect(subCaCertificateCrt).to.equal(await rootContract["getCertificateFile(string)"]("Blockchain Sub CA"));
     });
