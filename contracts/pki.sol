@@ -171,6 +171,23 @@ contract PKI is owned {
         certificates.push(cert);
     }
 
+    function isPendingCertificate() public view onlyOwner returns (bool) {
+        return oldestPendingCertificateSerialNumber <= certificates.length;
+    }
+
+    function getPendingCertificate()
+        public
+        view
+        onlyOwner
+        returns (string[33] memory)
+    {
+        require(
+            oldestPendingCertificateSerialNumber <= certificates.length,
+            "No pending certificates"
+        );
+        return certificates[oldestPendingCertificateSerialNumber - 1];
+    }
+
     // rejects the oldest pending certificate
     function rejectPendingCertificate() public onlyOwner {
         require(isPendingCertificate(), "No pending certificates");
@@ -250,23 +267,6 @@ contract PKI is owned {
         require(certificateStatus[serialNumber] == Status.Issued);
         require(serialNumber <= certificates.length);
         certificateStatus[serialNumber] = Status.Revoked;
-    }
-
-    function isPendingCertificate() public view onlyOwner returns (bool) {
-        return oldestPendingCertificateSerialNumber <= certificates.length;
-    }
-
-    function getPendingCertificate()
-        public
-        view
-        onlyOwner
-        returns (string[33] memory)
-    {
-        require(
-            oldestPendingCertificateSerialNumber <= certificates.length,
-            "No pending certificates"
-        );
-        return certificates[oldestPendingCertificateSerialNumber - 1];
     }
 
     // 0 - pending, 1 - issued, 2 - revoked, 3 - rejected, 4 - expired

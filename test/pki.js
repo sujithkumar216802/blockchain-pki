@@ -4,7 +4,7 @@ const { ethers } = require("hardhat");
 const { PublicKeyInfo, CertificationRequest, AttributeTypeAndValue, setEngine, CryptoEngine, Certificate, Extension, BasicConstraints, AuthorityKeyIdentifier } = require('pkijs');
 const { PrintableString, fromBER, Integer, OctetString } = require('asn1js');
 const { generateKeyPairSync, createPublicKey, createPrivateKey, createHash, webcrypto, subtle } = require('crypto');
-const { arrayBufferToString, toBase64 } = require('pvutils');
+const { arrayBufferToString, toBase64, stringToArrayBuffer, fromBase64 } = require('pvutils');
 
 describe("PKI", function () {
 
@@ -137,8 +137,6 @@ describe("PKI", function () {
             value: new PrintableString({ value: cert[index['subject']['commonName']] })
         }));
 
-        csr.attributes = [];
-
         // Set the public key in the CSR
         const berPublicKey = createPublicKey(requesterPublicKey).export({ type: 'spki', format: 'der' });
         const asn1 = fromBER(berPublicKey);
@@ -171,7 +169,7 @@ describe("PKI", function () {
 
     async function issueCertificate(issuer, subject, issuerPrivateKey, password) {
 
-        const certificate = new Certificate()
+        const certificate = new Certificate();
         certificate.version = 2;
         certificate.serialNumber = new Integer({ value: subject[index['miscellaneous']['serialNumber']] });
 
@@ -317,6 +315,30 @@ describe("PKI", function () {
         return { pem, signature, subjectKey };
     }
 
+    async function issueCertificateFromCSR(issuer, subjectCSR, issuerPrivateKey, password, subjectWalletAddress, contractAddress, serialNumber) {
+        const berSubjectCSR = subjectCSR.replace(/-----BEGIN CERTIFICATE REQUEST-----/, '').replace(/-----END CERTIFICATE REQUEST-----/, '').replace(/\n/g, '');
+        const derSubjectCSR = stringToArrayBuffer(fromBase64(berSubjectCSR));
+        const asn1 = fromBER(derSubjectCSR);
+        const cert = new CertificationRequest({ schema: asn1.result });
+        const subjectCert = new Array(33);
+        subjectCert[index['subject']['commonName']] = cert.subject.typesAndValues.find(typeAndValue => typeAndValue.type === '2.5.4.3').value.valueBlock.value;
+        subjectCert[index['subject']['country']] = cert.subject.typesAndValues.find(typeAndValue => typeAndValue.type === '2.5.4.6').value.valueBlock.value;
+        subjectCert[index['subject']['locality']] = cert.subject.typesAndValues.find(typeAndValue => typeAndValue.type === '2.5.4.7').value.valueBlock.value;
+        subjectCert[index['subject']['state']] = cert.subject.typesAndValues.find(typeAndValue => typeAndValue.type === '2.5.4.8').value.valueBlock.value;
+        subjectCert[index['subject']['organization']] = cert.subject.typesAndValues.find(typeAndValue => typeAndValue.type === '2.5.4.10').value.valueBlock.value;
+        subjectCert[index['publicKeyInfo']['publicKey']] = `-----BEGIN PUBLIC KEY-----\n${formatPEM(
+            toBase64(
+                arrayBufferToString(
+                    cert.subjectPublicKeyInfo.toSchema().toBER(false)
+                )
+            )
+        )}\n-----END PUBLIC KEY-----`;
+        subjectCert[index['miscellaneous']['serialNumber']] = serialNumber;
+        subjectCert[index['extensions']['subjectWalletAddress']] = subjectWalletAddress;
+        subjectCert[index['extensions']['contractAddress']] = contractAddress;
+        return await issueCertificate(issuer, subjectCert, issuerPrivateKey, password);
+    }
+
     var { publicKey, privateKey } = generateKeys();
     const rootCaPublicKey = publicKey;
     const rootCaPrivateKey = privateKey;
@@ -419,10 +441,6 @@ describe("PKI", function () {
         expect(subCaSerialNumber).to.equal(1);
         expect(await rootContract["getCertificateStatus(uint256)"](subCaSerialNumber)).to.equal(0);
 
-        // sub ca generating a csr
-        const subCSR = await generateCSR(subCaCertificate, subCaPublicKey, subCaPrivateKey, passphrase);
-        fs.writeFileSync('subCaCSR.csr', subCSR);
-
         // Deploy Sub CA
         const subCaContract = await PKI.connect(rootCA).deploy();
         expect(await subCaContract.owner()).to.equal(rootCA.address);
@@ -455,10 +473,6 @@ describe("PKI", function () {
         expect(userSerialNumber).to.equal(1);
         expect(await subCaContract["getCertificateStatus(uint256)"](userSerialNumber)).to.equal(0);
 
-        // user generating a csr
-        const userCSR = await generateCSR(userCertificate, userPublicKey, userPrivateKey, passphrase);
-        fs.writeFileSync('userCSR.csr', userCSR);
-
         // sub CA issuing a certificate
         const userCertificateFromContract = await subCaContract.connect(subCA).getPendingCertificate();
         var { pem, signature, subjectKey } = await issueCertificate(issuedSubCaCertificateFromContract, userCertificateFromContract, subCaPrivateKey, passphrase);
@@ -484,8 +498,116 @@ describe("PKI", function () {
         // Other function
         // getCertificate Name
         expect(issuedSubCaCertificateFromContract).to.deep.equal(await rootContract["getCertificate(string)"]("Blockchain Sub CA"));
-        expect(await rootContract["getCertificateStatus(string)"](subCaCertificate[index['subject']['commonName']])).to.equal(0); 
+        expect(await rootContract["getCertificateStatus(string)"](subCaCertificate[index['subject']['commonName']])).to.equal(0);
         expect(subCaCertificateCrt).to.equal(await rootContract["getCertificateFile(uint256)"](1));
         expect(subCaCertificateCrt).to.equal(await rootContract["getCertificateFile(string)"]("Blockchain Sub CA"));
     });
+
+    it("Simple PKI Contract", async function () {
+        // Deploy Root CA
+        const PKI = await ethers.getContractFactory("SimplePKI");
+        const [rootCA, subCA, user, rejectUser] = await ethers.getSigners();
+        const rootContract = await PKI.deploy();
+        await rootContract.deployed();
+        expect(await rootContract.owner()).to.equal(rootCA.address);
+
+
+        // fill root ca certificate values
+        rootCaCertificate[index["extensions"]["contractAddress"]] = rootContract.address;
+        rootCaCertificate[index["extensions"]["subjectWalletAddress"]] = rootCA.address;
+
+        // generate a self signed certificate
+        var { pem } = await issueCertificate(rootCaCertificate, rootCaCertificate, rootCaPrivateKey, passphrase);
+        const rootCaCertificateCrt = pem;
+        fs.writeFileSync('rootCaCertificate.crt', rootCaCertificateCrt);
+
+        // assign CaCertificate in the Root CA smartcontract
+        await rootContract.populateCaCertificate(pem);
+        expect(rootCaCertificateCrt).to.equal(await rootContract.caCertificate());
+
+        // generate a CSR for sub CA
+        const subCaCSR = await generateCSR(subCaCertificate, subCaPublicKey, subCaPrivateKey, passphrase);
+        fs.writeFileSync('subCaCSR.csr', subCaCSR);
+
+        // Should request CA Certificate
+        const subCaRequestTx = await rootContract.connect(subCA).requestCertificate(subCaCSR);
+        const subCaReceipt = await subCaRequestTx.wait();
+        const SubCaCertificateRequestedEvent = subCaReceipt.events.find(event => event.event === "CertificateRequested");
+        const subCaSerialNumber = SubCaCertificateRequestedEvent.args.serialNumber;
+        expect(subCaSerialNumber).to.equal(1);
+        expect(await rootContract["getCertificateStatus(uint256)"](subCaSerialNumber)).to.equal(0);
+
+        // Deploy Sub CA
+        const subCaContract = await PKI.connect(rootCA).deploy();
+        expect(await subCaContract.owner()).to.equal(rootCA.address);
+
+        // root issuing a certificate
+        const subCaCSRFromContract = await rootContract.getPendingCertificate(); // the returned array is not extensible
+        const subCaSerialNumberFromContract = await rootContract.oldestPendingCertificateSerialNumber();
+        const subCaWalletAddress = await rootContract.getCertificateRequester(subCaSerialNumberFromContract);
+        var { pem } = await issueCertificateFromCSR(rootCaCertificate, subCaCSRFromContract, rootCaPrivateKey, passphrase, subCaWalletAddress, subCaContract.address, subCaSerialNumberFromContract);
+        const subCaCertificateCrt = pem;
+        fs.writeFileSync('subCaCertificate.crt', subCaCertificateCrt);
+
+        // TODO, get common name ideally from the CSR
+        // Should Issue CA Certificate
+        await rootContract.issuePendingCertificate(pem, [subCaCertificate[index['subject']['commonName']]]);
+        expect(await rootContract["getCertificateStatus(uint256)"](subCaSerialNumber)).to.equal(1);
+
+        // assign CaCertificate in the Sub CA smartcontract
+        await subCaContract.populateCaCertificate(subCaCertificateCrt);
+        expect(subCaCertificateCrt).to.equal(await subCaContract.caCertificate());
+
+        // Transfer owner
+        await subCaContract.connect(rootCA).transferOwnership(subCA.address);
+        expect(await subCaContract.owner()).to.equal(subCA.address);
+
+        // generate a CSR for user
+        const userCSR = await generateCSR(userCertificate, userPublicKey, userPrivateKey, passphrase);
+        fs.writeFileSync('userCSR.csr', userCSR);
+
+        // Should request and issue user Certificate
+        const userRequestTx = await subCaContract.connect(user).requestCertificate(userCSR);
+        const userReceipt = await userRequestTx.wait();
+        const userCertificateRequestedEvent = userReceipt.events.find(event => event.event === "CertificateRequested");
+        const userSerialNumber = userCertificateRequestedEvent.args.serialNumber;
+        expect(userSerialNumber).to.equal(1);
+        expect(await subCaContract["getCertificateStatus(uint256)"](userSerialNumber)).to.equal(0);
+
+        // sub CA issuing a certificate
+        const userCSRFromContract = await subCaContract.connect(subCA).getPendingCertificate();
+        const userSerialNumberFromContract = await subCaContract.connect(subCA).oldestPendingCertificateSerialNumber();
+        const userWalletAddress = await subCaContract.connect(subCA).getCertificateRequester(userSerialNumberFromContract);
+        var { pem } = await issueCertificateFromCSR(subCaCertificate, userCSRFromContract, userPrivateKey, passphrase, userWalletAddress, "", userSerialNumberFromContract);
+        const userCertificateCrt = pem;
+        fs.writeFileSync('subCaCertificate.crt', userCertificateCrt);
+
+        await subCaContract.connect(subCA).issuePendingCertificate(pem, [userCertificate[index['subject']['commonName']]]);
+        expect(await subCaContract["getCertificateStatus(uint256)"](userSerialNumber)).to.equal(1);
+
+        // Revoke user
+        await subCaContract.connect(subCA).revokeCertificate(userSerialNumber);
+        expect(await subCaContract["getCertificateStatus(uint256)"](userSerialNumber)).to.equal(2);
+
+        // generate a CSR for sub CA
+        const rejectUserCSR = await generateCSR(rejectUserCertificate, rejectUserPublicKey, rejectUserPrivateKey, passphrase);
+        fs.writeFileSync('rejectUserCSR.csr', rejectUserCSR);
+
+        // rejectPendingCertificate
+        const rejectUserRequestTx = await subCaContract.connect(rejectUser).requestCertificate(rejectUserCSR);
+        const rejectUserReceipt = await rejectUserRequestTx.wait();
+        const rejectUserCertificateRequestedEvent = rejectUserReceipt.events.find(event => event.event === "CertificateRequested");
+        const rejectUserSerialNumber = rejectUserCertificateRequestedEvent.args.serialNumber;
+        expect(rejectUserSerialNumber).to.equal(2);
+        await subCaContract.connect(subCA).rejectPendingCertificate();
+        expect(await subCaContract["getCertificateStatus(uint256)"](rejectUserSerialNumber)).to.equal(3);
+
+        // Other function
+        // getCertificate Name
+        expect(subCaCertificateCrt).to.equal(await rootContract["getCertificate(string)"]("Blockchain Sub CA"));
+        expect(await rootContract["getCertificateStatus(string)"](subCaCertificate[index['subject']['commonName']])).to.equal(0);
+        expect(subCaCertificateCrt).to.equal(await rootContract["getCertificate(uint256)"](1));
+    });
+
+
 });
