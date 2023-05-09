@@ -90,7 +90,7 @@ describe("PKI", function () {
         return bytes;
     }
 
-    function generateKeys() {
+    function generateKeys(password) {
         const { publicKey, privateKey } = generateKeyPairSync('ec', {
             namedCurve: 'P-256',
             publicKeyEncoding: {
@@ -101,7 +101,7 @@ describe("PKI", function () {
                 type: 'pkcs8',
                 format: 'pem',
                 cipher: 'aes-256-cbc',
-                passphrase: passphrase
+                passphrase: password
             }
         });
 
@@ -339,73 +339,25 @@ describe("PKI", function () {
         return await issueCertificate(issuer, subjectCert, issuerPrivateKey, password);
     }
 
-    var { publicKey, privateKey } = generateKeys();
-    const rootCaPublicKey = publicKey;
-    const rootCaPrivateKey = privateKey;
+    const rootCaPublicKey = fs.readFileSync('reuseKeys/rootCaPublicKey.pem').toString();
+    const rootCaPrivateKey = fs.readFileSync('reuseKeys/rootCaPrivateKey.pem').toString();
     const rootCaCertificate = ["Blockchain Root CA", "Root CA", "TRZ", "TN", "IN", "Blockchain Root CA", "Root CA", "TRZ", "TN", "IN", "1681161711", "1781161711", "", "", "", "", "Elliptic Curve", "256", "", "3", "0", "", "", "", "true", "0", "", "", "Sepolia", "", "", "", ""];
-    rootCaCertificate[index['publicKeyInfo']['publicKey']] = publicKey;
-    fs.writeFileSync('rootCaPrivateKey.pem', rootCaPrivateKey);
-    fs.writeFileSync('rootCaPublicKey.pem', rootCaPublicKey);
-    fs.writeFileSync('UnlockedRootCaPrivateKey.pem', createPrivateKey({ key: rootCaPrivateKey, type: 'pkcs8', format: 'pem', passphrase: passphrase }).export({
-        format: 'pem',
-        type: 'pkcs8',
-    }));
-    // console.log('rootCaCertificate: ', rootCaCertificate);
-    // console.log('Root Private Key: ', createPrivateKey({ key: rootCaPrivateKey, type: 'pkcs8', format: 'pem', passphrase: passphrase }).export({
-    //     format: 'pem',
-    //     type: 'pkcs8',
-    // }));
+    rootCaCertificate[index['publicKeyInfo']['publicKey']] = rootCaPublicKey;
 
-    var { publicKey, privateKey } = generateKeys();
-    const subCaPublicKey = publicKey;
-    const subCaPrivateKey = privateKey;
+    const subCaPublicKey = fs.readFileSync('reuseKeys/subCaPublicKey.pem').toString();
+    const subCaPrivateKey = fs.readFileSync('reuseKeys/subCaPrivateKey.pem').toString();
     const subCaCertificate = ["Blockchain Sub CA", "Sub CA", "TRZ", "TN", "IN", "", "", "", "", "", "1681161711", "1781161711", "", "", "", "", "Elliptic Curve", "256", "", "3", "", "", "", "", "true", "0", "", "", "Sepolia", "", "", "", ""];
-    subCaCertificate[index['publicKeyInfo']['publicKey']] = publicKey;
-    fs.writeFileSync('subCaPrivateKey.pem', subCaPrivateKey);
-    fs.writeFileSync('subCaPublicKey.pem', subCaPublicKey);
-    fs.writeFileSync('UnlockedSubCaPrivateKey.pem', createPrivateKey({ key: subCaPrivateKey, type: 'pkcs8', format: 'pem', passphrase: passphrase }).export({
-        format: 'pem',
-        type: 'pkcs8',
-    }));
-    // console.log('subCaCertificate: ', subCaCertificate);
-    // console.log('SubCA Private Key: ', createPrivateKey({ key: subCaPrivateKey, type: 'pkcs8', format: 'pem', passphrase: passphrase }).export({
-    //     format: 'pem',
-    //     type: 'pkcs8',
-    // }));
+    subCaCertificate[index['publicKeyInfo']['publicKey']] = subCaPublicKey;
 
-    var { publicKey, privateKey } = generateKeys();
-    const userPublicKey = publicKey;
-    const userPrivateKey = privateKey;
+    const userPublicKey = fs.readFileSync('reuseKeys/userPublicKey.pem').toString();
+    const userPrivateKey = fs.readFileSync('reuseKeys/userPrivateKey.pem').toString();
     const userCertificate = ["Blockchain User 1", "User", "TRZ", "TN", "IN", "", "", "", "", "", "1681161711", "1781161711", "", "", "", "", "Elliptic Curve", "256", "", "3", "", "", "", "", "false", "0", "", "", "Sepolia", "", "", "", ""];
-    userCertificate[index['publicKeyInfo']['publicKey']] = publicKey;
-    fs.writeFileSync('userPrivateKey.pem', userPrivateKey);
-    fs.writeFileSync('userPublicKey.pem', userPublicKey);
-    fs.writeFileSync('UnlockedUserPrivateKey.pem', createPrivateKey({ key: userPrivateKey, type: 'pkcs8', format: 'pem', passphrase: passphrase }).export({
-        format: 'pem',
-        type: 'pkcs8',
-    }));
-    // console.log('userCaCertificate: ', userCertificate);
-    // console.log('User Private Key: ', createPrivateKey({ key: userPrivateKey, type: 'pkcs8', format: 'pem', passphrase: passphrase }).export({
-    //     format: 'pem',
-    //     type: 'pkcs8',
-    // }));
+    userCertificate[index['publicKeyInfo']['publicKey']] = userPublicKey;
 
-    var { publicKey, privateKey } = generateKeys();
-    const rejectUserPublicKey = publicKey;
-    const rejectUserPrivateKey = privateKey;
+    const rejectUserPublicKey = fs.readFileSync('reuseKeys/rejectUserPublicKey.pem').toString();
+    const rejectUserPrivateKey = fs.readFileSync('reuseKeys/rejectUserPrivateKey.pem').toString();
     const rejectUserCertificate = ["Blockchain User 2", "User", "TRZ", "TN", "IN", "", "", "", "", "", "1681161711", "1781161711", "", "", "", "", "Elliptic Curve", "256", "", "3", "", "", "", "", "false", "0", "", "", "Sepolia", "", "", "", ""];
-    rejectUserCertificate[index['publicKeyInfo']['publicKey']] = publicKey;
-    fs.writeFileSync('rejectUserPrivateKey.pem', rejectUserPrivateKey);
-    fs.writeFileSync('rejectUserPublicKey.pem', rejectUserPublicKey);
-    fs.writeFileSync('UnlockedRejectUserPrivateKey.pem', createPrivateKey({ key: rejectUserPrivateKey, type: 'pkcs8', format: 'pem', passphrase: passphrase }).export({
-        format: 'pem',
-        type: 'pkcs8',
-    }));
-    // console.log('rejectUserCaCertificate: ', rejectUserCertificate);
-    // console.log('RejectUser Private Key: ', createPrivateKey({ key: rejectUserPrivateKey, type: 'pkcs8', format: 'pem', passphrase: passphrase }).export({
-    //     format: 'pem',
-    //     type: 'pkcs8',
-    // }));
+    rejectUserCertificate[index['publicKeyInfo']['publicKey']] = rejectUserPublicKey;
 
     // A single test is being used to preserve state instead of having different tests which resets the state of the contract
     it("PKI Contract", async function () {

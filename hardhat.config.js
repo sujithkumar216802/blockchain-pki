@@ -11,7 +11,7 @@ module.exports = {
       },
     }]
   },
-  defaultNetwork: "ganache",
+  // defaultNetwork: "ganache",
   networks: {
     hardhat: {
       allowUnlimitedContractSize: true
